@@ -5,6 +5,8 @@ import {
 
 import DashboardView from '../views/DashboardView.vue'
 import OperationalPlaceholderView from '../views/OperationalPlaceholderView.vue'
+import PipelineAssetsView from '../views/PipelineAssetsView.vue'
+import NetworkMapView from '../views/NetworkMapView.vue'
 
 const routes = [
   {
@@ -17,22 +19,18 @@ const routes = [
   },
   {
     path: '/network-map',
-    name: 'network-map',
-    component: OperationalPlaceholderView,
-    meta: {
-      title: 'Network Map',
-      description:
-        'Explore pipeline routes, sensor locations and network conditions.',
+  name: 'network-map',
+  component: NetworkMapView,
+  meta: {
+    title: 'Network Map',
     },
   },
   {
     path: '/pipeline-assets',
-    name: 'pipeline-assets',
-    component: OperationalPlaceholderView,
-    meta: {
-      title: 'Pipeline Assets',
-      description:
-        'Review registered pipelines and their lifecycle information.',
+  name: 'pipeline-assets',
+  component: PipelineAssetsView,
+  meta: {
+    title: 'Pipeline Assets',
     },
   },
   {

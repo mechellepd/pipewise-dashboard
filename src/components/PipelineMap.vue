@@ -1,16 +1,35 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 import { pipelines } from '../data/pipelines'
 import { sensors } from '../data/sensors'
 
+const props = defineProps({
+  focusPipelineId: {
+    type: String,
+    default: null,
+  },
+
+  expanded: {
+    type: Boolean,
+    default: false,
+  },
+})
+
 const mapContainer = ref(null)
 
 let map = null
 let pipelineLayer = null
 let sensorLayer = null
+const pipelinePolylines = new Map()
 
 
 const statusColours = {
@@ -126,6 +145,51 @@ function createSensorPopup(sensor) {
     </div>
   `
 }
+function resetPipelineStyles() {
+  pipelinePolylines.forEach(({ pipeline, polyline }) => {
+    const colour =
+      statusColours[pipeline.status] ?? statusColours.normal
+
+    polyline.setStyle({
+      color: colour,
+      weight: pipeline.status === 'critical' ? 6 : 4,
+      opacity: 0.95,
+    })
+  })
+}
+
+function focusPipeline(pipelineId) {
+  if (!map || !pipelineId) {
+    return
+  }
+
+  const target = pipelinePolylines.get(pipelineId)
+
+  if (!target) {
+    console.warn(`Pipeline ${pipelineId} was not found.`)
+    return
+  }
+
+  resetPipelineStyles()
+
+  target.polyline.setStyle({
+    color: '#61e4ff',
+    weight: 9,
+    opacity: 1,
+  })
+
+  target.polyline.bringToFront()
+
+  map.flyToBounds(target.polyline.getBounds(), {
+    padding: [70, 70],
+    duration: 1,
+    maxZoom: 16,
+  })
+
+  window.setTimeout(() => {
+    target.polyline.openPopup()
+  }, 850)
+}
 
 function initialiseMap() {
   if (!mapContainer.value || map) {
@@ -219,19 +283,24 @@ function initialiseMap() {
    */
 
   pipelines.forEach((pipeline) => {
-    const colour =
-      statusColours[pipeline.status] ?? statusColours.normal
+  const colour =
+    statusColours[pipeline.status] ?? statusColours.normal
 
-    L.polyline(pipeline.coordinates, {
-      color: colour,
-      weight: pipeline.status === 'critical' ? 6 : 4,
-      opacity: 0.95,
-      lineCap: 'round',
-      lineJoin: 'round',
-    })
-      .bindPopup(createPipelinePopup(pipeline))
-      .addTo(pipelineLayer)
+  const polyline = L.polyline(pipeline.coordinates, {
+    color: colour,
+    weight: pipeline.status === 'critical' ? 6 : 4,
+    opacity: 0.95,
+    lineCap: 'round',
+    lineJoin: 'round',
   })
+    .bindPopup(createPipelinePopup(pipeline))
+    .addTo(pipelineLayer)
+
+  pipelinePolylines.set(pipeline.id, {
+    pipeline,
+    polyline,
+  })
+})
 
   /*
    * DRAW SENSORS
@@ -258,16 +327,35 @@ function initialiseMap() {
   })
 
   window.setTimeout(() => {
-    map?.invalidateSize()
-  }, 100)
+  map?.invalidateSize()
+
+  if (props.focusPipelineId) {
+    focusPipeline(props.focusPipelineId)
+  }
+}, 150)
 }
 
 onMounted(() => {
   initialiseMap()
 })
 
+watch(
+  () => props.focusPipelineId,
+  async (pipelineId) => {
+    if (!pipelineId) {
+      resetPipelineStyles()
+      return
+    }
+
+    await nextTick()
+    focusPipeline(pipelineId)
+  },
+)
+
 onBeforeUnmount(() => {
   map?.remove()
+
+  pipelinePolylines.clear()
 
   map = null
   pipelineLayer = null
@@ -301,11 +389,12 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div
-      ref="mapContainer"
-      class="pipeline-map"
-      aria-label="Interactive pipeline monitoring map"
-    ></div>
+<div
+  ref="mapContainer"
+  class="pipeline-map"
+  :class="{ expanded }"
+  aria-label="Interactive pipeline monitoring map"
+></div>
   </article>
 </template>
 
@@ -375,6 +464,11 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 395px;
   background: #08151e;
+}
+
+.pipeline-map.expanded {
+  height: calc(100vh - 245px);
+  min-height: 540px;
 }
 
 /*
@@ -584,5 +678,10 @@ onBeforeUnmount(() => {
   .pipeline-map {
     height: 360px;
   }
+
+  .pipeline-map.expanded {
+  height: 520px;
+  min-height: 520px;
+}
 }
 </style>
