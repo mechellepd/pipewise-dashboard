@@ -1,8 +1,18 @@
 <script setup>
 import Topbar from '../components/Topbar.vue'
 import PipelineMap from '../components/PipelineMap.vue'
+import { useRouter } from 'vue-router'
 
 // metrics, alerts and pipelineAssets remain below
+const router = useRouter()
+
+function openAssetRegistry() {
+  router.push({ name: 'pipeline-assets' })
+}
+
+function openIncidentCentre() {
+  router.push({ name: 'alerts' })
+}
 
 const metrics = [
   {
@@ -141,11 +151,12 @@ const pipelineAssets = [
             </div>
 
             <button
-              class="text-button"
-              type="button"
-            >
-              View all
-            </button>
+  class="text-button"
+  type="button"
+  @click="openIncidentCentre"
+>
+  View all
+</button>
           </div>
 
           <div class="alert-list">
@@ -176,9 +187,10 @@ const pipelineAssets = [
           </div>
 
           <button
-            class="secondary-button"
-            type="button"
-          >
+             class="secondary-button"
+             type="button"
+            @click="openIncidentCentre"
+            >
             Open incident centre
           </button>
         </article>
@@ -281,8 +293,9 @@ const pipelineAssets = [
             <button
               class="text-button"
               type="button"
+              @click="openAssetRegistry"
             >
-              View assets
+            View assets
             </button>
           </div>
 
