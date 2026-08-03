@@ -82,7 +82,7 @@ function selectMenu(menuName) {
 
         <div>
           <strong>Muazz Osman</strong>
-          <small>System Administrator</small>
+          <small>Product Manager</small>
         </div>
       </div>
     </div>
