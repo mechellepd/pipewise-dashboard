@@ -55,6 +55,26 @@ function createPipelinePopup(pipeline) {
         </div>
 
         <div>
+          <dt>Material</dt>
+          <dd>${pipeline.material}</dd>
+        </div>
+
+        <div>
+          <dt>Diameter</dt>
+          <dd>${pipeline.diameter} mm</dd>
+        </div>
+
+        <div>
+          <dt>Installed</dt>
+          <dd>${pipeline.installationYear}</dd>
+        </div>
+
+        <div>
+          <dt>Length</dt>
+          <dd>${pipeline.lengthKm} km</dd>
+        </div>
+
+        <div>
           <dt>Status</dt>
           <dd>${pipeline.status}</dd>
         </div>
@@ -79,6 +99,11 @@ function createSensorPopup(sensor) {
         </div>
 
         <div>
+          <dt>Pipeline</dt>
+          <dd>${sensor.pipelineId}</dd>
+        </div>
+
+        <div>
           <dt>Pressure</dt>
           <dd>${sensor.pressure} PSI</dd>
         </div>
@@ -89,8 +114,13 @@ function createSensorPopup(sensor) {
         </div>
 
         <div>
-          <dt>Status</dt>
-          <dd>${sensor.status}</dd>
+          <dt>Battery</dt>
+          <dd>${sensor.batteryLevel}%</dd>
+        </div>
+
+        <div>
+          <dt>Last update</dt>
+          <dd>${sensor.lastUpdated}</dd>
         </div>
       </dl>
     </div>
