@@ -117,7 +117,7 @@ function createSensorIcon(status) {
   })
 }
 
-function pipelinePopup(pipeline) {
+function createPipelinePopup(pipeline) {
   return `
     <div class="pipewise-popup">
       <span class="pipewise-popup__label">
@@ -141,7 +141,7 @@ function pipelinePopup(pipeline) {
   `
 }
 
-function sensorPopup(sensor) {
+function createSensorPopup(sensor) {
   return `
     <div class="pipewise-popup">
       <span class="pipewise-popup__label">
@@ -193,20 +193,82 @@ function initialiseMap() {
     })
     .addTo(map)
 
-  L.tileLayer(
+  /*
+   * BASEMAPS
+   */
+
+  const darkMap = L.tileLayer(
     'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     {
       maxZoom: 20,
       attribution:
         '&copy; OpenStreetMap contributors &copy; CARTO',
     },
-  ).addTo(map)
+  )
+
+  const streetMap = L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+      maxZoom: 19,
+      attribution:
+        '&copy; OpenStreetMap contributors',
+    },
+  )
+
+  const lightMap = L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    {
+      maxZoom: 20,
+      attribution:
+        '&copy; OpenStreetMap contributors &copy; CARTO',
+    },
+  )
+
+  const satelliteMap = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/' +
+      'World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 19,
+      attribution:
+        'Tiles &copy; Esri and imagery providers',
+    },
+  )
+
+  darkMap.addTo(map)
+
+  /*
+   * OVERLAY LAYERS
+   */
 
   pipelineLayer = L.layerGroup().addTo(map)
   sensorLayer = L.layerGroup().addTo(map)
 
+  const baseMaps = {
+    'Dark Map': darkMap,
+    'Street Map': streetMap,
+    'Light Map': lightMap,
+    'Satellite Imagery': satelliteMap,
+  }
+
+  const overlays = {
+    Pipelines: pipelineLayer,
+    Sensors: sensorLayer,
+  }
+
+  L.control
+    .layers(baseMaps, overlays, {
+      position: 'topright',
+      collapsed: true,
+    })
+    .addTo(map)
+
+  /*
+   * DRAW PIPELINES
+   */
+
   pipelines.forEach((pipeline) => {
-    const colour = statusColours[pipeline.status]
+    const colour =
+      statusColours[pipeline.status] ?? statusColours.normal
 
     L.polyline(pipeline.coordinates, {
       color: colour,
@@ -215,17 +277,25 @@ function initialiseMap() {
       lineCap: 'round',
       lineJoin: 'round',
     })
-      .bindPopup(pipelinePopup(pipeline))
+      .bindPopup(createPipelinePopup(pipeline))
       .addTo(pipelineLayer)
   })
+
+  /*
+   * DRAW SENSORS
+   */
 
   sensors.forEach((sensor) => {
     L.marker(sensor.position, {
       icon: createSensorIcon(sensor.status),
     })
-      .bindPopup(sensorPopup(sensor))
+      .bindPopup(createSensorPopup(sensor))
       .addTo(sensorLayer)
   })
+
+  /*
+   * FIT MAP TO NETWORK
+   */
 
   const allCoordinates = pipelines.flatMap(
     (pipeline) => pipeline.coordinates,
@@ -246,6 +316,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   map?.remove()
+
   map = null
   pipelineLayer = null
   sensorLayer = null
@@ -354,6 +425,10 @@ onBeforeUnmount(() => {
   background: #08151e;
 }
 
+/*
+ * LEAFLET BASE STYLING
+ */
+
 :deep(.leaflet-container) {
   background: #08151e;
   font-family:
@@ -362,6 +437,10 @@ onBeforeUnmount(() => {
     system-ui,
     sans-serif;
 }
+
+/*
+ * ZOOM CONTROL
+ */
 
 :deep(.leaflet-control-zoom) {
   overflow: hidden;
@@ -381,6 +460,52 @@ onBeforeUnmount(() => {
   color: #61e4ff;
 }
 
+/*
+ * BASEMAP AND LAYER CONTROL
+ */
+
+:deep(.leaflet-control-layers) {
+  overflow: hidden;
+  border: 1px solid #284354;
+  border-radius: 9px;
+  background: rgba(8, 20, 29, 0.96);
+  color: #dff7ff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+}
+
+:deep(.leaflet-control-layers-toggle) {
+  width: 38px;
+  height: 38px;
+  background-color: #0b1c26;
+  opacity: 0.85;
+}
+
+:deep(.leaflet-control-layers-expanded) {
+  padding: 12px 14px;
+}
+
+:deep(.leaflet-control-layers-base),
+:deep(.leaflet-control-layers-overlays) {
+  font-size: 0.68rem;
+}
+
+:deep(.leaflet-control-layers label) {
+  margin: 6px 0;
+  color: #a8bdc9;
+}
+
+:deep(.leaflet-control-layers-selector) {
+  margin-right: 6px;
+}
+
+:deep(.leaflet-control-layers-separator) {
+  border-top-color: #284354;
+}
+
+/*
+ * ATTRIBUTION
+ */
+
 :deep(.leaflet-control-attribution) {
   background: rgba(7, 16, 25, 0.76);
   color: #597486;
@@ -390,6 +515,10 @@ onBeforeUnmount(() => {
 :deep(.leaflet-control-attribution a) {
   color: #61bad3;
 }
+
+/*
+ * SENSOR MARKERS
+ */
 
 :deep(.pipewise-sensor-wrapper) {
   border: 0;
@@ -411,6 +540,10 @@ onBeforeUnmount(() => {
 :deep(.pipewise-sensor--critical) {
   animation: sensor-pulse 1.5s ease-in-out infinite;
 }
+
+/*
+ * POPUPS
+ */
 
 :deep(.leaflet-popup-content-wrapper),
 :deep(.leaflet-popup-tip) {
