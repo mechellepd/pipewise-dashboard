@@ -1,30 +1,45 @@
 <script setup>
 import pipewiseLogo from '../assets/pipewise-logo.png'
 
-defineProps({
-  activeMenu: {
-    type: String,
-    required: true,
-  },
-})
-
-const emit = defineEmits(['change-menu'])
-
 const menuItems = [
-  { name: 'Dashboard', icon: '▦' },
-  { name: 'Network Map', icon: '⌖' },
-  { name: 'Pipeline Assets', icon: '⌁' },
-  { name: 'Sensor Network', icon: '◉' },
-  { name: 'Alerts', icon: '!' },
-  { name: 'Maintenance', icon: '⚙' },
-  { name: 'Analytics', icon: '↗' },
+  {
+    name: 'Dashboard',
+    routeName: 'dashboard',
+    icon: '▦',
+  },
+  {
+    name: 'Network Map',
+    routeName: 'network-map',
+    icon: '⌖',
+  },
+  {
+    name: 'Pipeline Assets',
+    routeName: 'pipeline-assets',
+    icon: '⌁',
+  },
+  {
+    name: 'Sensor Network',
+    routeName: 'sensor-network',
+    icon: '◉',
+  },
+  {
+    name: 'Alerts',
+    routeName: 'alerts',
+    icon: '!',
+    notificationCount: 3,
+  },
+  {
+    name: 'Maintenance',
+    routeName: 'maintenance',
+    icon: '⚙',
+  },
+  {
+    name: 'Analytics',
+    routeName: 'analytics',
+    icon: '↗',
+  },
 ]
-
-function selectMenu(menuName) {
-  emit('change-menu', menuName)
-}
 </script>
-
 <template>
   <aside class="sidebar">
     <div class="brand">
@@ -35,35 +50,33 @@ function selectMenu(menuName) {
       />
     </div>
 
-    <nav class="navigation">
-      <p class="navigation-label">
-        MONITORING
-      </p>
+<nav class="navigation">
+  <p class="navigation-label">
+    MONITORING
+  </p>
 
-      <button
-        v-for="item in menuItems"
-        :key="item.name"
-        type="button"
-        class="navigation-item"
-        :class="{ active: activeMenu === item.name }"
-        @click="selectMenu(item.name)"
-      >
-        <span class="navigation-icon">
-          {{ item.icon }}
-        </span>
+  <RouterLink
+    v-for="item in menuItems"
+    :key="item.routeName"
+    :to="{ name: item.routeName }"
+    class="navigation-item"
+  >
+    <span class="navigation-icon">
+      {{ item.icon }}
+    </span>
 
-        <span class="navigation-text">
-          {{ item.name }}
-        </span>
+    <span class="navigation-text">
+      {{ item.name }}
+    </span>
 
-        <span
-          v-if="item.name === 'Alerts'"
-          class="notification-count"
-        >
-          3
-        </span>
-      </button>
-    </nav>
+    <span
+      v-if="item.notificationCount"
+      class="notification-count"
+    >
+      {{ item.notificationCount }}
+    </span>
+  </RouterLink>
+</nav>
 
     <div class="sidebar-footer">
       <div class="connection-status">
@@ -158,7 +171,11 @@ function selectMenu(menuName) {
   color: #dff7ff;
 }
 
-.navigation-item.active {
+.navigation-item {
+  text-decoration: none;
+}
+
+.navigation-item.router-link-exact-active {
   border-color: rgba(0, 194, 255, 0.22);
   background:
     linear-gradient(

@@ -1,9 +1,11 @@
 <script setup>
-defineProps({
-  activeMenu: {
-    type: String,
-    required: true
-  }
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
+const pageTitle = computed(() => {
+  return route.meta.title ?? 'PIPEWISE'
 })
 </script>
 
@@ -12,10 +14,10 @@ defineProps({
 
     <div>
       <p class="eyebrow">
-        SMART INFRASTRUCTURE MONITORING
+        Pipeline Intelligence & Early Warning System
       </p>
 
-      <h2>{{ activeMenu }}</h2>
+   <h2>{{ pageTitle }}</h2>
     </div>
 
     <div class="topbar-actions">

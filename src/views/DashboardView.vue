@@ -2,12 +2,7 @@
 import Topbar from '../components/Topbar.vue'
 import PipelineMap from '../components/PipelineMap.vue'
 
-defineProps({
-  activeMenu: {
-    type: String,
-    required: true,
-  },
-})
+// metrics, alerts and pipelineAssets remain below
 
 const metrics = [
   {
@@ -95,7 +90,7 @@ const pipelineAssets = [
 
 <template>
   <main class="main-content">
-    <Topbar :active-menu="activeMenu" />
+    <Topbar />
 
     <section class="dashboard-content">
       <div class="welcome-row">
