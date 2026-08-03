@@ -3,93 +3,15 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
+import { pipelines } from '../data/pipelines'
+import { sensors } from '../data/sensors'
+
 const mapContainer = ref(null)
 
 let map = null
 let pipelineLayer = null
 let sensorLayer = null
 
-const pipelines = [
-  {
-    id: 'PL-018',
-    name: 'Kiulap Distribution Line',
-    status: 'normal',
-    coordinates: [
-      [4.9015, 114.9205],
-      [4.9075, 114.9295],
-      [4.9135, 114.9385],
-      [4.919, 114.947],
-    ],
-  },
-  {
-    id: 'PL-041',
-    name: 'Berakas Supply Line',
-    status: 'warning',
-    coordinates: [
-      [4.919, 114.947],
-      [4.926, 114.957],
-      [4.933, 114.968],
-      [4.941, 114.978],
-    ],
-  },
-  {
-    id: 'PL-023',
-    name: 'Gadong Main Line',
-    status: 'critical',
-    coordinates: [
-      [4.919, 114.947],
-      [4.913, 114.956],
-      [4.907, 114.965],
-      [4.901, 114.974],
-    ],
-  },
-  {
-    id: 'PL-065',
-    name: 'Jerudong Connector',
-    status: 'normal',
-    coordinates: [
-      [4.9075, 114.9295],
-      [4.913, 114.918],
-      [4.919, 114.907],
-      [4.926, 114.898],
-    ],
-  },
-]
-
-const sensors = [
-  {
-    id: 'SN-018',
-    type: 'Pressure sensor',
-    status: 'normal',
-    pressure: 46.2,
-    flowRate: 1194,
-    position: [4.9075, 114.9295],
-  },
-  {
-    id: 'SN-041',
-    type: 'Flow meter',
-    status: 'warning',
-    pressure: 34.6,
-    flowRate: 1028,
-    position: [4.926, 114.957],
-  },
-  {
-    id: 'SN-023',
-    type: 'Pressure sensor',
-    status: 'critical',
-    pressure: 21.8,
-    flowRate: 832,
-    position: [4.907, 114.965],
-  },
-  {
-    id: 'SN-065',
-    type: 'Valve station',
-    status: 'normal',
-    pressure: 44.9,
-    flowRate: 1107,
-    position: [4.919, 114.907],
-  },
-]
 
 const statusColours = {
   normal: '#20db9b',
