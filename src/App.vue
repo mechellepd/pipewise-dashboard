@@ -1,5 +1,21 @@
 <script setup>
+import {
+  onBeforeUnmount,
+  onMounted,
+} from 'vue'
+
 import Sidebar from './components/Sidebar.vue'
+import { useSensorStore } from './stores/sensorStore'
+
+const sensorStore = useSensorStore()
+
+onMounted(() => {
+  sensorStore.startSimulation()
+})
+
+onBeforeUnmount(() => {
+  sensorStore.stopSimulation()
+})
 </script>
 
 <template>

@@ -6,11 +6,12 @@ import {
   ref,
   watch,
 } from 'vue'
+
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 import { pipelines } from '../data/pipelines'
-import { sensors } from '../data/sensors'
+import { useSensorStore } from '../stores/sensorStore'
 
 const props = defineProps({
   focusPipelineId: {
@@ -25,12 +26,15 @@ const props = defineProps({
 })
 
 const mapContainer = ref(null)
+const sensorStore = useSensorStore()
 
 let map = null
 let pipelineLayer = null
 let sensorLayer = null
-const pipelinePolylines = new Map()
+let layerControl = null
 
+const pipelinePolylines = new Map()
+const sensorMarkers = new Map()
 
 const statusColours = {
   normal: '#20db9b',
@@ -38,20 +42,59 @@ const statusColours = {
   critical: '#ff5267',
 }
 
+function getStatusColour(status) {
+  return (
+    statusColours[status] ??
+    statusColours.normal
+  )
+}
+
+function getPipelineStatus(pipelineId) {
+  const relatedSensors =
+    sensorStore.getSensorsByPipeline(pipelineId)
+
+  if (
+    relatedSensors.some(
+      (sensor) => sensor.status === 'critical',
+    )
+  ) {
+    return 'critical'
+  }
+
+  if (
+    relatedSensors.some(
+      (sensor) => sensor.status === 'warning',
+    )
+  ) {
+    return 'warning'
+  }
+
+  const pipeline = pipelines.find(
+    (item) => item.id === pipelineId,
+  )
+
+  return pipeline?.status ?? 'normal'
+}
+
 function createSensorIcon(status) {
-  const colour = statusColours[status] ?? statusColours.normal
+  const colour = getStatusColour(status)
 
   return L.divIcon({
     className: 'pipewise-sensor-wrapper',
+
     html: `
       <span
-        class="pipewise-sensor pipewise-sensor--${status}"
+        class="
+          pipewise-sensor
+          pipewise-sensor--${status}
+        "
         style="
           --sensor-colour: ${colour};
           --sensor-glow: ${colour}55;
         "
       ></span>
     `,
+
     iconSize: [24, 24],
     iconAnchor: [12, 12],
     popupAnchor: [0, -14],
@@ -59,10 +102,17 @@ function createSensorIcon(status) {
 }
 
 function createPipelinePopup(pipeline) {
+  const status = getPipelineStatus(pipeline.id)
+
   return `
     <div class="pipewise-popup">
-      <span class="pipewise-popup__label">
-        ${pipeline.status.toUpperCase()}
+      <span
+        class="
+          pipewise-popup__label
+          pipewise-popup__label--${status}
+        "
+      >
+        ${status.toUpperCase()}
       </span>
 
       <strong>${pipeline.name}</strong>
@@ -95,7 +145,7 @@ function createPipelinePopup(pipeline) {
 
         <div>
           <dt>Status</dt>
-          <dd>${pipeline.status}</dd>
+          <dd>${status}</dd>
         </div>
       </dl>
     </div>
@@ -105,7 +155,12 @@ function createPipelinePopup(pipeline) {
 function createSensorPopup(sensor) {
   return `
     <div class="pipewise-popup">
-      <span class="pipewise-popup__label">
+      <span
+        class="
+          pipewise-popup__label
+          pipewise-popup__label--${sensor.status}
+        "
+      >
         ${sensor.status.toUpperCase()}
       </span>
 
@@ -129,7 +184,10 @@ function createSensorPopup(sensor) {
 
         <div>
           <dt>Flow rate</dt>
-          <dd>${sensor.flowRate.toLocaleString()} L/min</dd>
+          <dd>
+            ${sensor.flowRate.toLocaleString()}
+            L/min
+          </dd>
         </div>
 
         <div>
@@ -145,28 +203,74 @@ function createSensorPopup(sensor) {
     </div>
   `
 }
-function resetPipelineStyles() {
-  pipelinePolylines.forEach(({ pipeline, polyline }) => {
-    const colour =
-      statusColours[pipeline.status] ?? statusColours.normal
 
-    polyline.setStyle({
-      color: colour,
-      weight: pipeline.status === 'critical' ? 6 : 4,
-      opacity: 0.95,
-    })
+function resetPipelineStyles() {
+  pipelinePolylines.forEach(
+    ({ pipeline, polyline }) => {
+      const status =
+        getPipelineStatus(pipeline.id)
+
+      polyline.setStyle({
+        color: getStatusColour(status),
+        weight:
+          status === 'critical'
+            ? 6
+            : 4,
+        opacity: 0.95,
+      })
+
+      polyline.setPopupContent(
+        createPipelinePopup(pipeline),
+      )
+    },
+  )
+}
+
+function updateSensorMarkers() {
+  sensorStore.sensors.forEach((sensor) => {
+    const marker = sensorMarkers.get(sensor.id)
+
+    if (!marker) {
+      return
+    }
+
+    marker.setIcon(
+      createSensorIcon(sensor.status),
+    )
+
+    marker.setPopupContent(
+      createSensorPopup(sensor),
+    )
   })
 }
 
-function focusPipeline(pipelineId) {
+function updateMapTelemetry() {
+  updateSensorMarkers()
+  resetPipelineStyles()
+
+  if (props.focusPipelineId) {
+    highlightPipeline(
+      props.focusPipelineId,
+      false,
+    )
+  }
+}
+
+function highlightPipeline(
+  pipelineId,
+  moveMap = true,
+) {
   if (!map || !pipelineId) {
     return
   }
 
-  const target = pipelinePolylines.get(pipelineId)
+  const target =
+    pipelinePolylines.get(pipelineId)
 
   if (!target) {
-    console.warn(`Pipeline ${pipelineId} was not found.`)
+    console.warn(
+      `Pipeline ${pipelineId} was not found.`,
+    )
     return
   }
 
@@ -180,15 +284,127 @@ function focusPipeline(pipelineId) {
 
   target.polyline.bringToFront()
 
-  map.flyToBounds(target.polyline.getBounds(), {
-    padding: [70, 70],
-    duration: 1,
-    maxZoom: 16,
-  })
+  if (!moveMap) {
+    return
+  }
+
+  map.flyToBounds(
+    target.polyline.getBounds(),
+    {
+      padding: [70, 70],
+      duration: 1,
+      maxZoom: 16,
+    },
+  )
 
   window.setTimeout(() => {
     target.polyline.openPopup()
   }, 850)
+}
+
+function createBasemaps() {
+  const darkMap = L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/' +
+      'dark_all/{z}/{x}/{y}{r}.png',
+    {
+      maxZoom: 20,
+      attribution:
+        '&copy; OpenStreetMap contributors ' +
+        '&copy; CARTO',
+    },
+  )
+
+  const streetMap = L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/' +
+      '{z}/{x}/{y}.png',
+    {
+      maxZoom: 19,
+      attribution:
+        '&copy; OpenStreetMap contributors',
+    },
+  )
+
+  const lightMap = L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/' +
+      'light_all/{z}/{x}/{y}{r}.png',
+    {
+      maxZoom: 20,
+      attribution:
+        '&copy; OpenStreetMap contributors ' +
+        '&copy; CARTO',
+    },
+  )
+
+  const satelliteMap = L.tileLayer(
+    'https://server.arcgisonline.com/' +
+      'ArcGIS/rest/services/' +
+      'World_Imagery/MapServer/' +
+      'tile/{z}/{y}/{x}',
+    {
+      maxZoom: 19,
+      attribution:
+        'Tiles &copy; Esri and imagery providers',
+    },
+  )
+
+  return {
+    darkMap,
+    streetMap,
+    lightMap,
+    satelliteMap,
+  }
+}
+
+function drawPipelines() {
+  pipelines.forEach((pipeline) => {
+    const status =
+      getPipelineStatus(pipeline.id)
+
+    const polyline = L.polyline(
+      pipeline.coordinates,
+      {
+        color: getStatusColour(status),
+        weight:
+          status === 'critical'
+            ? 6
+            : 4,
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round',
+      },
+    )
+      .bindPopup(
+        createPipelinePopup(pipeline),
+      )
+      .addTo(pipelineLayer)
+
+    pipelinePolylines.set(
+      pipeline.id,
+      {
+        pipeline,
+        polyline,
+      },
+    )
+  })
+}
+
+function drawSensors() {
+  sensorStore.sensors.forEach((sensor) => {
+    const marker = L.marker(
+      sensor.position,
+      {
+        icon: createSensorIcon(
+          sensor.status,
+        ),
+      },
+    )
+      .bindPopup(
+        createSensorPopup(sensor),
+      )
+      .addTo(sensorLayer)
+
+    sensorMarkers.set(sensor.id, marker)
+  })
 }
 
 function initialiseMap() {
@@ -209,55 +425,20 @@ function initialiseMap() {
     })
     .addTo(map)
 
-  /*
-   * BASEMAPS
-   */
-
-  const darkMap = L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    {
-      maxZoom: 20,
-      attribution:
-        '&copy; OpenStreetMap contributors &copy; CARTO',
-    },
-  )
-
-  const streetMap = L.tileLayer(
-    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    {
-      maxZoom: 19,
-      attribution:
-        '&copy; OpenStreetMap contributors',
-    },
-  )
-
-  const lightMap = L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    {
-      maxZoom: 20,
-      attribution:
-        '&copy; OpenStreetMap contributors &copy; CARTO',
-    },
-  )
-
-  const satelliteMap = L.tileLayer(
-    'https://server.arcgisonline.com/ArcGIS/rest/services/' +
-      'World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {
-      maxZoom: 19,
-      attribution:
-        'Tiles &copy; Esri and imagery providers',
-    },
-  )
+  const {
+    darkMap,
+    streetMap,
+    lightMap,
+    satelliteMap,
+  } = createBasemaps()
 
   darkMap.addTo(map)
 
-  /*
-   * OVERLAY LAYERS
-   */
+  pipelineLayer =
+    L.layerGroup().addTo(map)
 
-  pipelineLayer = L.layerGroup().addTo(map)
-  sensorLayer = L.layerGroup().addTo(map)
+  sensorLayer =
+    L.layerGroup().addTo(map)
 
   const baseMaps = {
     'Dark Map': darkMap,
@@ -271,52 +452,15 @@ function initialiseMap() {
     Sensors: sensorLayer,
   }
 
-  L.control
+  layerControl = L.control
     .layers(baseMaps, overlays, {
       position: 'topright',
       collapsed: true,
     })
     .addTo(map)
 
-  /*
-   * DRAW PIPELINES
-   */
-
-  pipelines.forEach((pipeline) => {
-  const colour =
-    statusColours[pipeline.status] ?? statusColours.normal
-
-  const polyline = L.polyline(pipeline.coordinates, {
-    color: colour,
-    weight: pipeline.status === 'critical' ? 6 : 4,
-    opacity: 0.95,
-    lineCap: 'round',
-    lineJoin: 'round',
-  })
-    .bindPopup(createPipelinePopup(pipeline))
-    .addTo(pipelineLayer)
-
-  pipelinePolylines.set(pipeline.id, {
-    pipeline,
-    polyline,
-  })
-})
-
-  /*
-   * DRAW SENSORS
-   */
-
-  sensors.forEach((sensor) => {
-    L.marker(sensor.position, {
-      icon: createSensorIcon(sensor.status),
-    })
-      .bindPopup(createSensorPopup(sensor))
-      .addTo(sensorLayer)
-  })
-
-  /*
-   * FIT MAP TO NETWORK
-   */
+  drawPipelines()
+  drawSensors()
 
   const allCoordinates = pipelines.flatMap(
     (pipeline) => pipeline.coordinates,
@@ -327,12 +471,14 @@ function initialiseMap() {
   })
 
   window.setTimeout(() => {
-  map?.invalidateSize()
+    map?.invalidateSize()
 
-  if (props.focusPipelineId) {
-    focusPipeline(props.focusPipelineId)
-  }
-}, 150)
+    if (props.focusPipelineId) {
+      highlightPipeline(
+        props.focusPipelineId,
+      )
+    }
+  }, 150)
 }
 
 onMounted(() => {
@@ -342,24 +488,47 @@ onMounted(() => {
 watch(
   () => props.focusPipelineId,
   async (pipelineId) => {
+    await nextTick()
+
     if (!pipelineId) {
       resetPipelineStyles()
       return
     }
 
-    await nextTick()
-    focusPipeline(pipelineId)
+    highlightPipeline(pipelineId)
+  },
+)
+
+watch(
+  () =>
+    sensorStore.sensors.map((sensor) => ({
+      id: sensor.id,
+      pressure: sensor.pressure,
+      flowRate: sensor.flowRate,
+      status: sensor.status,
+    })),
+  () => {
+    updateMapTelemetry()
+  },
+  {
+    deep: true,
   },
 )
 
 onBeforeUnmount(() => {
+  if (layerControl && map) {
+    map.removeControl(layerControl)
+  }
+
   map?.remove()
 
   pipelinePolylines.clear()
+  sensorMarkers.clear()
 
   map = null
   pipelineLayer = null
   sensorLayer = null
+  layerControl = null
 })
 </script>
 
@@ -368,7 +537,10 @@ onBeforeUnmount(() => {
     <div class="panel-header">
       <div>
         <h4>Pipeline Network Map</h4>
-        <p>Real-time infrastructure and sensor status</p>
+
+        <p>
+          Real-time infrastructure and sensor status
+        </p>
       </div>
 
       <div class="map-legend">
@@ -389,12 +561,12 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-<div
-  ref="mapContainer"
-  class="pipeline-map"
-  :class="{ expanded }"
-  aria-label="Interactive pipeline monitoring map"
-></div>
+    <div
+      ref="mapContainer"
+      class="pipeline-map"
+      :class="{ expanded }"
+      aria-label="Interactive pipeline monitoring map"
+    ></div>
   </article>
 </template>
 
@@ -405,7 +577,8 @@ onBeforeUnmount(() => {
   border: 1px solid #1b303e;
   border-radius: 13px;
   background: rgba(11, 25, 34, 0.96);
-  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.13);
+  box-shadow:
+    0 14px 35px rgba(0, 0, 0, 0.13);
 }
 
 .panel-header {
@@ -471,10 +644,6 @@ onBeforeUnmount(() => {
   min-height: 540px;
 }
 
-/*
- * LEAFLET BASE STYLING
- */
-
 :deep(.leaflet-container) {
   background: #08151e;
   font-family:
@@ -483,10 +652,6 @@ onBeforeUnmount(() => {
     system-ui,
     sans-serif;
 }
-
-/*
- * ZOOM CONTROL
- */
 
 :deep(.leaflet-control-zoom) {
   overflow: hidden;
@@ -506,17 +671,14 @@ onBeforeUnmount(() => {
   color: #61e4ff;
 }
 
-/*
- * BASEMAP AND LAYER CONTROL
- */
-
 :deep(.leaflet-control-layers) {
   overflow: hidden;
   border: 1px solid #284354;
   border-radius: 9px;
   background: rgba(8, 20, 29, 0.96);
   color: #dff7ff;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.32);
 }
 
 :deep(.leaflet-control-layers-toggle) {
@@ -548,10 +710,6 @@ onBeforeUnmount(() => {
   border-top-color: #284354;
 }
 
-/*
- * ATTRIBUTION
- */
-
 :deep(.leaflet-control-attribution) {
   background: rgba(7, 16, 25, 0.76);
   color: #597486;
@@ -561,10 +719,6 @@ onBeforeUnmount(() => {
 :deep(.leaflet-control-attribution a) {
   color: #61bad3;
 }
-
-/*
- * SENSOR MARKERS
- */
 
 :deep(.pipewise-sensor-wrapper) {
   border: 0;
@@ -584,19 +738,17 @@ onBeforeUnmount(() => {
 }
 
 :deep(.pipewise-sensor--critical) {
-  animation: sensor-pulse 1.5s ease-in-out infinite;
+  animation:
+    sensor-pulse 1.5s ease-in-out infinite;
 }
-
-/*
- * POPUPS
- */
 
 :deep(.leaflet-popup-content-wrapper),
 :deep(.leaflet-popup-tip) {
   border: 1px solid #294555;
   background: rgba(8, 20, 29, 0.98);
   color: #e9f4fb;
-  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.4);
 }
 
 :deep(.leaflet-popup-content-wrapper) {
@@ -619,10 +771,21 @@ onBeforeUnmount(() => {
 :deep(.pipewise-popup__label) {
   display: block;
   margin-bottom: 7px;
-  color: #ff7182;
   font-size: 0.58rem;
   font-weight: 900;
   letter-spacing: 0.1em;
+}
+
+:deep(.pipewise-popup__label--normal) {
+  color: #4ce4af;
+}
+
+:deep(.pipewise-popup__label--warning) {
+  color: #ffc857;
+}
+
+:deep(.pipewise-popup__label--critical) {
+  color: #ff7182;
 }
 
 :deep(.pipewise-popup strong) {
@@ -656,6 +819,7 @@ onBeforeUnmount(() => {
   margin: 0;
   color: #dff7ff;
   font-weight: 700;
+  text-align: right;
   text-transform: capitalize;
 }
 
@@ -680,8 +844,8 @@ onBeforeUnmount(() => {
   }
 
   .pipeline-map.expanded {
-  height: 520px;
-  min-height: 520px;
-}
+    height: 520px;
+    min-height: 520px;
+  }
 }
 </style>
