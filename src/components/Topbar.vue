@@ -1,6 +1,19 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import NotificationDrawer from './NotificationDrawer.vue'
+import { useNotificationStore } from '../stores/notificationStore'
+
+const notificationStore = useNotificationStore()
+const isNotificationDrawerOpen = ref(false)
+
+function openNotificationDrawer() {
+  isNotificationDrawerOpen.value = true
+}
+
+function closeNotificationDrawer() {
+  isNotificationDrawerOpen.value = false
+}
 
 const route = useRoute()
 
@@ -81,12 +94,25 @@ function submitAsset() {
         LIVE MONITORING
       </div>
 
-      <button
-        class="icon-button"
-        type="button"
-      >
-        🔔
-      </button>
+<button
+  class="icon-button notification-button"
+  type="button"
+  aria-label="Open notifications"
+  @click="openNotificationDrawer"
+>
+  <span aria-hidden="true">🔔</span>
+
+  <span
+    v-if="notificationStore.unreadCount > 0"
+    class="notification-badge"
+  >
+    {{
+      notificationStore.unreadCount > 9
+        ? '9+'
+        : notificationStore.unreadCount
+    }}
+  </span>
+</button>
 
       <button
   class="primary-button"
@@ -99,6 +125,11 @@ function submitAsset() {
     </div>
 
   </header>
+
+  <NotificationDrawer
+  :is-open="isNotificationDrawerOpen"
+  @close="closeNotificationDrawer"
+/>
 
   <Teleport to="body">
   <div
@@ -353,6 +384,26 @@ function submitAsset() {
 
     cursor:pointer;
 
+    position: relative;
+
+}
+
+.notification-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
+  border: 2px solid #071019;
+  border-radius: 999px;
+  background: #ff5267;
+  color: #ffffff;
+  font-size: 0.56rem;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .primary-button{
