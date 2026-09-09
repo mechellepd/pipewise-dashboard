@@ -1,11 +1,36 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import NotificationDrawer from './NotificationDrawer.vue'
-import { useNotificationStore } from '../stores/notificationStore'
+import { ref } from 'vue'
 
-const notificationStore = useNotificationStore()
-const isNotificationDrawerOpen = ref(false)
+import NotificationDrawer from './NotificationDrawer.vue'
+
+import { useNotificationStore } from '../stores/notificationStore'
+import { useSensorStore } from '../stores/sensorStore'
+
+defineProps({
+  activeMenu: {
+    type: String,
+    required: true,
+  },
+})
+
+const emit = defineEmits([
+  'register-asset',
+])
+
+const notificationStore =
+  useNotificationStore()
+
+const sensorStore =
+  useSensorStore()
+
+const isNotificationDrawerOpen =
+  ref(false)
+
+/*
+|--------------------------------------------------------------------------
+| Notification Centre
+|--------------------------------------------------------------------------
+*/
 
 function openNotificationDrawer() {
   isNotificationDrawerOpen.value = true
@@ -15,584 +40,493 @@ function closeNotificationDrawer() {
   isNotificationDrawerOpen.value = false
 }
 
-const route = useRoute()
+/*
+|--------------------------------------------------------------------------
+| Asset Registration
+|--------------------------------------------------------------------------
+*/
 
-const pageTitle = computed(() => {
-  return route.meta.title ?? 'PIPEWISE'
-})
-
-const isRegisterModalOpen = ref(false)
-
-const assetForm = reactive({
-  assetId: '',
-  assetName: '',
-  material: '',
-  diameter: '',
-  installationYear: '',
-  location: '',
-})
-
-function openRegisterModal() {
-  isRegisterModalOpen.value = true
-}
-
-function closeRegisterModal() {
-  isRegisterModalOpen.value = false
-}
-
-function resetAssetForm() {
-  assetForm.assetId = ''
-  assetForm.assetName = ''
-  assetForm.material = ''
-  assetForm.diameter = ''
-  assetForm.installationYear = ''
-  assetForm.location = ''
-}
-
-function submitAsset() {
-  const requiredFields = [
-    assetForm.assetId,
-    assetForm.assetName,
-    assetForm.material,
-    assetForm.diameter,
-    assetForm.location,
-  ]
-
-  if (requiredFields.some((value) => !String(value).trim())) {
-    window.alert('Please complete all required fields.')
-    return
-  }
-
-  console.log('Registered asset:', {
-    ...assetForm,
-  })
-
-  window.alert(
-    `${assetForm.assetId} has been registered in the prototype.`,
-  )
-
-  resetAssetForm()
-  closeRegisterModal()
+function openRegisterAsset() {
+  emit('register-asset')
 }
 </script>
 
 <template>
   <header class="topbar">
 
-    <div>
+    <!-- Page information -->
+    <div class="topbar-heading">
+
       <p class="eyebrow">
-        Pipeline Intelligence & Early Warning System
+        SMART INFRASTRUCTURE MONITORING
       </p>
 
-   <h2>{{ pageTitle }}</h2>
+      <h2>
+        {{ activeMenu }}
+      </h2>
+
     </div>
 
+    <!-- Topbar actions -->
     <div class="topbar-actions">
 
+      <!-- Live monitoring -->
       <div class="live-indicator">
         <span></span>
+
         LIVE MONITORING
       </div>
 
-<button
-  class="icon-button notification-button"
-  type="button"
-  aria-label="Open notifications"
-  @click="openNotificationDrawer"
->
-  <span aria-hidden="true">🔔</span>
 
-  <span
-    v-if="notificationStore.unreadCount > 0"
-    class="notification-badge"
-  >
-    {{
-      notificationStore.unreadCount > 9
-        ? '9+'
-        : notificationStore.unreadCount
-    }}
-  </span>
-</button>
-
+      <!-- Demo Mode: Start -->
       <button
-  class="primary-button"
-  type="button"
-  @click="openRegisterModal"
->
-  + Register Asset
-</button>
+        v-if="!sensorStore.isDemoRunning"
+        class="demo-button"
+        type="button"
+        @click="sensorStore.startLeakDemo"
+      >
+        ▶ Demo Leak Scenario
+      </button>
+
+
+      <!-- Demo Mode: Running -->
+      <button
+        v-else
+        class="demo-button active"
+        type="button"
+        disabled
+      >
+        ● Demo Running
+      </button>
+
+
+      <!-- Demo Mode: Reset -->
+      <button
+        v-if="
+          sensorStore.demoStage !== 'idle'
+        "
+        class="reset-demo-button"
+        type="button"
+        @click="sensorStore.resetLeakDemo"
+      >
+        Reset
+      </button>
+
+
+      <!-- Notification Centre -->
+      <button
+        class="
+          icon-button
+          notification-button
+        "
+        type="button"
+        aria-label="Open notifications"
+        @click="openNotificationDrawer"
+      >
+        <span aria-hidden="true">
+          🔔
+        </span>
+
+        <span
+          v-if="
+            notificationStore.unreadCount > 0
+          "
+          class="notification-badge"
+        >
+          {{
+            notificationStore.unreadCount > 9
+              ? '9+'
+              : notificationStore.unreadCount
+          }}
+        </span>
+      </button>
+
+
+      <!-- Register Asset -->
+      <button
+        class="primary-button"
+        type="button"
+        @click="openRegisterAsset"
+      >
+        + Register Asset
+      </button>
 
     </div>
 
   </header>
 
+
+  <!-- Notification Drawer -->
   <NotificationDrawer
-  :is-open="isNotificationDrawerOpen"
-  @close="closeNotificationDrawer"
-/>
+    :is-open="
+      isNotificationDrawerOpen
+    "
+    @close="
+      closeNotificationDrawer
+    "
+  />
 
-  <Teleport to="body">
-  <div
-    v-if="isRegisterModalOpen"
-    class="modal-backdrop"
-    @click.self="closeRegisterModal"
-  >
-    <section
-      class="asset-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="register-asset-title"
-    >
-      <div class="modal-header">
-        <div>
-          <p class="modal-eyebrow">
-            ASSET REGISTRY
-          </p>
 
-          <h3 id="register-asset-title">
-            Register Pipeline Asset
-          </h3>
-        </div>
+  <!--
+    IMPORTANT:
 
-        <button
-          class="modal-close"
-          type="button"
-          aria-label="Close register asset form"
-          @click="closeRegisterModal"
-        >
-          ×
-        </button>
-      </div>
+    If your existing Topbar.vue contains your
+    Register Asset modal here, KEEP IT HERE.
 
-      <form
-        class="asset-form"
-        @submit.prevent="submitAsset"
-      >
-        <label>
-          <span>Asset ID *</span>
-
-          <input
-            v-model.trim="assetForm.assetId"
-            type="text"
-            placeholder="Example: PL-072"
-          />
-        </label>
-
-        <label>
-          <span>Asset name *</span>
-
-          <input
-            v-model.trim="assetForm.assetName"
-            type="text"
-            placeholder="Example: Lambak Main Line"
-          />
-        </label>
-
-        <div class="form-row">
-          <label>
-            <span>Material *</span>
-
-            <select v-model="assetForm.material">
-              <option value="" disabled>
-                Select material
-              </option>
-
-              <option value="Ductile iron">
-                Ductile iron
-              </option>
-
-              <option value="Steel">
-                Steel
-              </option>
-
-              <option value="HDPE">
-                HDPE
-              </option>
-
-              <option value="PVC">
-                PVC
-              </option>
-            </select>
-          </label>
-
-          <label>
-            <span>Diameter *</span>
-
-            <input
-              v-model.number="assetForm.diameter"
-              type="number"
-              min="1"
-              placeholder="mm"
-            />
-          </label>
-        </div>
-
-        <div class="form-row">
-          <label>
-            <span>Installation year</span>
-
-            <input
-              v-model.number="assetForm.installationYear"
-              type="number"
-              min="1900"
-              max="2100"
-              placeholder="2026"
-            />
-          </label>
-
-          <label>
-            <span>Location *</span>
-
-            <input
-              v-model.trim="assetForm.location"
-              type="text"
-              placeholder="Example: Lambak"
-            />
-          </label>
-        </div>
-
-        <div class="modal-actions">
-          <button
-            class="cancel-button"
-            type="button"
-            @click="closeRegisterModal"
-          >
-            Cancel
-          </button>
-
-          <button
-            class="save-button"
-            type="submit"
-          >
-            Register asset
-          </button>
-        </div>
-      </form>
-    </section>
-  </div>
-</Teleport>
+    Do not delete the modal code we previously
+    built.
+  -->
 
 </template>
 
 <style scoped>
 
-.topbar{
-    position:sticky;
-    top:0;
-    z-index:15;
+/*
+|--------------------------------------------------------------------------
+| Topbar
+|--------------------------------------------------------------------------
+*/
 
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
 
-    min-height:86px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 
-    padding:16px 28px;
+  min-height: 86px;
 
-    border-bottom:1px solid #1b2d3a;
+  padding: 16px 28px;
 
-    background:rgba(7,16,25,.88);
+  border-bottom:
+    1px solid #1b2d3a;
 
-    backdrop-filter:blur(18px);
+  background:
+    rgba(7, 16, 25, 0.88);
+
+  backdrop-filter:
+    blur(18px);
 }
 
-.eyebrow{
 
-    margin:0 0 4px;
+/*
+|--------------------------------------------------------------------------
+| Heading
+|--------------------------------------------------------------------------
+*/
 
-    color:#4a829d;
+.topbar-heading {
+  min-width: 0;
+}
 
-    font-size:.63rem;
+.eyebrow {
+  margin: 0 0 4px;
 
-    font-weight:800;
+  color: #4a829d;
 
-    letter-spacing:.15em;
+  font-size: 0.63rem;
+  font-weight: 800;
 
+  letter-spacing: 0.15em;
 }
 
 .topbar h2 {
   margin: 0;
+
   color: #f4fbff;
+
   font-size: 1.42rem;
 }
 
-.topbar-actions{
 
-    display:flex;
+/*
+|--------------------------------------------------------------------------
+| Actions
+|--------------------------------------------------------------------------
+*/
 
-    align-items:center;
+.topbar-actions {
+  display: flex;
+  align-items: center;
 
-    gap:11px;
+  gap: 11px;
 
+  flex-shrink: 0;
 }
 
-.live-indicator{
 
-    display:flex;
+/*
+|--------------------------------------------------------------------------
+| Live Monitoring
+|--------------------------------------------------------------------------
+*/
 
-    align-items:center;
+.live-indicator {
+  display: flex;
+  align-items: center;
 
-    gap:7px;
+  gap: 7px;
 
-    padding:8px 11px;
+  padding: 8px 11px;
 
-    border-radius:999px;
+  border:
+    1px solid
+    rgba(32, 219, 155, 0.25);
 
-    border:1px solid rgba(32,219,155,.25);
+  border-radius: 999px;
 
-    background:rgba(32,219,155,.07);
+  background:
+    rgba(32, 219, 155, 0.07);
 
-    color:#58e6b2;
+  color: #58e6b2;
 
-    font-size:.66rem;
+  font-size: 0.66rem;
+  font-weight: 800;
 
-    font-weight:800;
-
-    letter-spacing:.07em;
-
+  letter-spacing: 0.07em;
 }
 
-.live-indicator span{
+.live-indicator span {
+  width: 7px;
+  height: 7px;
 
-    width:7px;
+  border-radius: 50%;
 
-    height:7px;
+  background: #20db9b;
 
-    border-radius:50%;
-
-    background:#20db9b;
-
-    box-shadow:0 0 9px #20db9b;
-
+  box-shadow:
+    0 0 9px #20db9b;
 }
 
-.icon-button{
 
-    width:39px;
+/*
+|--------------------------------------------------------------------------
+| Demo Mode
+|--------------------------------------------------------------------------
+*/
 
-    height:39px;
+.demo-button,
+.reset-demo-button {
+  min-height: 39px;
 
-    border:none;
+  padding: 0 13px;
 
-    border-radius:9px;
+  border-radius: 9px;
 
-    background:#0e1c26;
+  cursor: pointer;
 
-    color: #e9f4fb;
+  font-size: 0.67rem;
+  font-weight: 800;
 
-    border:1px solid #213747;
-
-    cursor:pointer;
-
-    position: relative;
-
+  white-space: nowrap;
 }
+
+
+/* Start Demo */
+
+.demo-button {
+  border:
+    1px solid
+    rgba(255, 200, 87, 0.32);
+
+  background:
+    rgba(255, 200, 87, 0.08);
+
+  color: #ffc857;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.demo-button:hover:not(:disabled) {
+  border-color:
+    rgba(255, 200, 87, 0.5);
+
+  background:
+    rgba(255, 200, 87, 0.15);
+}
+
+
+/* Demo currently running */
+
+.demo-button.active {
+  border-color:
+    rgba(255, 82, 103, 0.32);
+
+  background:
+    rgba(255, 82, 103, 0.09);
+
+  color: #ff7182;
+
+  cursor: default;
+}
+
+
+/* Reset Demo */
+
+.reset-demo-button {
+  border:
+    1px solid #294353;
+
+  background: #10232f;
+
+  color: #8fa6b4;
+
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.reset-demo-button:hover {
+  background: #142a37;
+
+  color: #ffffff;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Notification Button
+|--------------------------------------------------------------------------
+*/
+
+.icon-button {
+  position: relative;
+
+  display: grid;
+
+  width: 39px;
+  height: 39px;
+
+  flex-shrink: 0;
+
+  place-items: center;
+
+  border:
+    1px solid #213747;
+
+  border-radius: 9px;
+
+  background: #0e1c26;
+
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  border-color: #315166;
+
+  background: #132632;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Notification Badge
+|--------------------------------------------------------------------------
+*/
 
 .notification-badge {
   position: absolute;
+
   top: -5px;
   right: -5px;
+
   display: grid;
+
   min-width: 18px;
   height: 18px;
+
   padding: 0 5px;
+
   place-items: center;
-  border: 2px solid #071019;
+
+  border:
+    2px solid #071019;
+
   border-radius: 999px;
+
   background: #ff5267;
+
   color: #ffffff;
+
   font-size: 0.56rem;
   font-weight: 900;
+
   line-height: 1;
 }
 
-.primary-button{
 
-    padding:11px 15px;
+/*
+|--------------------------------------------------------------------------
+| Register Asset
+|--------------------------------------------------------------------------
+*/
 
-    border:none;
+.primary-button {
+  padding: 11px 15px;
 
-    border-radius:9px;
+  border: none;
 
-    cursor:pointer;
-
-    background:#00addf;
-
-    color:#00131c;
-
-    font-size:.78rem;
-
-    font-weight:800;
-
-}
-
-@media(max-width:820px){
-
-    .topbar{
-
-        align-items:flex-start;
-
-        padding-inline:16px;
-
-    }
-
-    .live-indicator,
-    .primary-button{
-
-        display:none;
-
-    }
-
-}
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(1, 9, 14, 0.78);
-  backdrop-filter: blur(8px);
-}
-
-.asset-modal {
-  width: min(100%, 640px);
-  overflow: hidden;
-  border: 1px solid #294555;
-  border-radius: 16px;
-  background:
-    radial-gradient(
-      circle at top right,
-      rgba(0, 194, 255, 0.1),
-      transparent 18rem
-    ),
-    #0a1821;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
-}
-
-.modal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 22px 24px;
-  border-bottom: 1px solid #1b303e;
-}
-
-.modal-eyebrow {
-  margin: 0 0 5px;
-  color: #4a829d;
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-}
-
-.modal-header h3 {
-  margin: 0;
-  color: #f4fbff;
-  font-size: 1.15rem;
-}
-
-.modal-close {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 1px solid #284354;
-  border-radius: 8px;
-  background: #10232f;
-  color: #89a5b5;
-  font-size: 1.25rem;
-}
-
-.modal-close:hover {
-  color: #ffffff;
-}
-
-.asset-form {
-  display: grid;
-  gap: 17px;
-  padding: 24px;
-}
-
-.asset-form label {
-  display: grid;
-  gap: 7px;
-}
-
-.asset-form label span {
-  color: #8fa6b4;
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.asset-form input,
-.asset-form select {
-  width: 100%;
-  min-height: 43px;
-  padding: 10px 12px;
-  border: 1px solid #294353;
   border-radius: 9px;
-  outline: none;
-  background: #0c1d27;
-  color: #e9f4fb;
-}
 
-.asset-form input::placeholder {
-  color: #506b7b;
-}
-
-.asset-form input:focus,
-.asset-form select:focus {
-  border-color: #00addf;
-  box-shadow: 0 0 0 3px rgba(0, 173, 223, 0.1);
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 15px;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 5px;
-}
-
-.cancel-button,
-.save-button {
-  min-height: 41px;
-  padding: 0 16px;
-  border-radius: 9px;
-  font-weight: 800;
-}
-
-.cancel-button {
-  border: 1px solid #294353;
-  background: #10232f;
-  color: #9ab0bc;
-}
-
-.save-button {
-  border: 0;
   background: #00addf;
+
   color: #00131c;
+
+  cursor: pointer;
+
+  font-size: 0.78rem;
+  font-weight: 800;
+
+  white-space: nowrap;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 
-@media (max-width: 580px) {
-  .modal-backdrop {
-    padding: 12px;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-
-  .asset-form,
-  .modal-header {
-    padding: 18px;
-  }
+.primary-button:hover {
+  background: #25c6ed;
 }
+
+.primary-button:active {
+  transform: translateY(1px);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Responsive
+|--------------------------------------------------------------------------
+*/
+
+@media (max-width: 1100px) {
+
+  .live-indicator {
+    display: none;
+  }
+
+}
+
+
+@media (max-width: 820px) {
+
+  .topbar {
+    align-items: flex-start;
+
+    padding-inline: 16px;
+  }
+
+  .live-indicator,
+  .demo-button,
+  .reset-demo-button,
+  .primary-button {
+    display: none;
+  }
+
+}
+
 </style>

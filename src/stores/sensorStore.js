@@ -2,13 +2,10 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { sensors as initialSensors } from '../data/sensors'
-import { useNotificationStore } from './notificationStore'
 
 export const useSensorStore = defineStore(
   'sensorStore',
   () => {
-    const notificationStore = useNotificationStore()
-
     const sensors = ref(
       initialSensors.map((sensor) => ({
         ...sensor,
@@ -17,7 +14,12 @@ export const useSensorStore = defineStore(
 
     const isSimulationRunning = ref(false)
 
+    const isDemoRunning = ref(false)
+
+    const demoStage = ref('idle')
+
     let simulationTimer = null
+    let demoTimer = null
 
     const normalSensorCount = computed(() => {
       return sensors.value.filter(
@@ -75,10 +77,9 @@ export const useSensorStore = defineStore(
         console.warn(
           `Sensor ${sensorId} was not found.`,
         )
+
         return
       }
-
-      const previousStatus = sensor.status
 
       Object.assign(sensor, updates)
 
@@ -86,81 +87,9 @@ export const useSensorStore = defineStore(
         sensor.status =
           getStatusFromPressure(sensor.pressure)
       }
-
-      handleStatusTransition(
-        sensor,
-        previousStatus,
-      )
-    }
-
-    function createStatusNotification(
-      sensor,
-      previousStatus,
-    ) {
-      if (sensor.status === 'critical') {
-        notificationStore.addNotification({
-          title: 'Critical pressure detected',
-          message:
-            `${sensor.id} has entered a critical state ` +
-            `at ${sensor.pressure} PSI.`,
-          assetId: sensor.pipelineId,
-          sensorId: sensor.id,
-          severity: 'critical',
-          category: 'Leak detection',
-        })
-
-        return
-      }
-
-      if (sensor.status === 'warning') {
-        notificationStore.addNotification({
-          title: 'Pipeline pressure warning',
-          message:
-            `${sensor.id} has fallen below the normal ` +
-            `pressure range at ${sensor.pressure} PSI.`,
-          assetId: sensor.pipelineId,
-          sensorId: sensor.id,
-          severity: 'warning',
-          category: 'Pressure monitoring',
-        })
-
-        return
-      }
-
-      if (
-        sensor.status === 'normal' &&
-        previousStatus !== 'normal'
-      ) {
-        notificationStore.addNotification({
-          title: 'Sensor pressure recovered',
-          message:
-            `${sensor.id} has returned to its normal ` +
-            `operating range at ${sensor.pressure} PSI.`,
-          assetId: sensor.pipelineId,
-          sensorId: sensor.id,
-          severity: 'information',
-          category: 'System recovery',
-        })
-      }
-    }
-
-    function handleStatusTransition(
-      sensor,
-      previousStatus,
-    ) {
-      if (sensor.status === previousStatus) {
-        return
-      }
-
-      createStatusNotification(
-        sensor,
-        previousStatus,
-      )
     }
 
     function generateReading(sensor) {
-      const previousStatus = sensor.status
-
       const pressureChange =
         (Math.random() - 0.5) * 1.2
 
@@ -185,11 +114,6 @@ export const useSensorStore = defineStore(
 
       sensor.status =
         getStatusFromPressure(sensor.pressure)
-
-      handleStatusTransition(
-        sensor,
-        previousStatus,
-      )
     }
 
     function startSimulation() {
@@ -217,20 +141,157 @@ export const useSensorStore = defineStore(
       window.clearInterval(simulationTimer)
 
       simulationTimer = null
+
       isSimulationRunning.value = false
     }
 
-    function resetSensors() {
-      sensors.value = initialSensors.map(
-        (sensor) => ({
-          ...sensor,
-        }),
+    function stopDemoTimer() {
+      if (!demoTimer) {
+        return
+      }
+
+      window.clearInterval(demoTimer)
+
+      demoTimer = null
+    }
+
+    function startLeakDemo() {
+      if (isDemoRunning.value) {
+        return
+      }
+
+      const demoSensor =
+        getSensorById('SN-023')
+
+      if (!demoSensor) {
+        console.warn(
+          'Demo sensor SN-023 was not found.',
+        )
+
+        return
+      }
+
+      stopSimulation()
+      stopDemoTimer()
+
+      isDemoRunning.value = true
+      demoStage.value = 'normal'
+
+      updateSensor('SN-023', {
+        pressure: 46,
+        flowRate: 1180,
+        lastUpdated: 'Just now',
+      })
+
+      let step = 0
+
+      const demoReadings = [
+        {
+          pressure: 45,
+          flowRate: 1168,
+          stage: 'normal',
+        },
+        {
+          pressure: 42,
+          flowRate: 1145,
+          stage: 'normal',
+        },
+        {
+          pressure: 39,
+          flowRate: 1108,
+          stage: 'declining',
+        },
+        {
+          pressure: 36,
+          flowRate: 1065,
+          stage: 'warning',
+        },
+        {
+          pressure: 33,
+          flowRate: 1010,
+          stage: 'warning',
+        },
+        {
+          pressure: 29,
+          flowRate: 950,
+          stage: 'warning',
+        },
+        {
+          pressure: 24,
+          flowRate: 885,
+          stage: 'critical',
+        },
+        {
+          pressure: 21,
+          flowRate: 832,
+          stage: 'critical',
+        },
+      ]
+
+      demoTimer = window.setInterval(
+        () => {
+          if (
+            step >= demoReadings.length
+          ) {
+            stopDemoTimer()
+
+            demoStage.value = 'complete'
+
+            isDemoRunning.value = false
+
+            return
+          }
+
+          const reading =
+            demoReadings[step]
+
+            demoStage.value =
+            reading.stage
+
+          updateSensor('SN-023', {
+            pressure: reading.pressure,
+            flowRate: reading.flowRate,
+            lastUpdated: 'Just now',
+          })
+
+          step += 1
+        },
+        3500,
       )
+    }
+
+    function resetLeakDemo() {
+      stopDemoTimer()
+
+      isDemoRunning.value = false
+
+      demoStage.value = 'idle'
+
+      updateSensor('SN-023', {
+        pressure: 46.2,
+        flowRate: 1194,
+        lastUpdated: 'Just now',
+      })
+
+      startSimulation()
+    }
+
+    function resetSensors() {
+      sensors.value =
+        initialSensors.map(
+          (sensor) => ({
+            ...sensor,
+          }),
+        )
     }
 
     return {
       sensors,
+
       isSimulationRunning,
+
+      isDemoRunning,
+      demoStage,
 
       normalSensorCount,
       warningSensorCount,
@@ -239,9 +300,15 @@ export const useSensorStore = defineStore(
 
       getSensorById,
       getSensorsByPipeline,
+
       updateSensor,
+
       startSimulation,
       stopSimulation,
+
+      startLeakDemo,
+      resetLeakDemo,
+
       resetSensors,
     }
   },
