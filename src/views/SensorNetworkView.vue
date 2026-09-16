@@ -121,9 +121,9 @@ async function importSensors(event) {
   try {
     const rows = (await file.text()).trim().split(/\r?\n/).filter(Boolean)
     const headers = rows[0].split(',').map((header) => header.trim())
-    const required = ['id', 'pipelineId', 'type', 'latitude', 'longitude']
+    const required = ['pipelineId', 'type', 'latitude', 'longitude']
     if (required.some((header) => !headers.includes(header))) {
-      throw new Error('CSV must include id, pipelineId, type, latitude and longitude headers.')
+      throw new Error('CSV must include pipelineId, type, latitude and longitude headers.')
     }
 
     let imported = 0
@@ -133,16 +133,22 @@ async function importSensors(event) {
       const record = Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']))
       const pipeline = assetStore.pipelines.find((item) => item.id === record.pipelineId)
 
-      if (!pipeline || sensorStore.sensorIdExists(record.id)) {
+      if (
+        !pipeline ||
+        (record.id && sensorStore.sensorIdExists(record.id))
+      ) {
         skipped.push(record.id || 'Unnamed row')
         return
       }
 
+      const sensorId =
+        record.id || sensorStore.generateSensorId(record.type)
+
       sensorStore.registerSensor({
-        id: record.id,
+        id: sensorId,
         pipelineId: record.pipelineId,
         type: record.type,
-        serialNumber: record.serialNumber || record.id,
+        serialNumber: record.serialNumber || sensorId,
         manufacturer: record.manufacturer || 'Unspecified',
         model: record.model || 'Unspecified',
         communication: record.communication || 'LoRaWAN',

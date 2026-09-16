@@ -573,7 +573,7 @@ function exportView() {
                 <input
                   v-model.trim="editForm.id"
                   required
-                  pattern="[A-Za-z]{2}-[0-9]{3,}"
+                  readonly
                 />
               </label>
 

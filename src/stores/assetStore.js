@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { pipelines as initialPipelines } from '../data/pipelines'
+import { generateNextId, recordGeneratedId } from '../utils/idGenerator'
 
 const STORAGE_KEY = 'pipewise-registered-assets'
 
@@ -63,15 +64,24 @@ export const useAssetStore = defineStore('assetStore', () => {
     )
   }
 
+  function generateAssetId() {
+    return generateNextId(
+      'PL',
+      pipelines.value.map((pipeline) => pipeline.id),
+    )
+  }
+
   function registerAsset(asset) {
+    const assetId = asset.id?.trim().toUpperCase() || generateAssetId()
     const registeredAsset = clonePipeline({
       ...asset,
-      id: asset.id.trim().toUpperCase(),
+      id: assetId,
       name: asset.name.trim(),
       status: 'normal',
     })
 
     pipelines.value.push(registeredAsset)
+    recordGeneratedId(assetId)
 
     persistPipelines()
 
@@ -130,6 +140,7 @@ export const useAssetStore = defineStore('assetStore', () => {
   return {
     pipelines,
     assetIdExists,
+    generateAssetId,
     registerAsset,
     updateAsset,
     deleteAsset,

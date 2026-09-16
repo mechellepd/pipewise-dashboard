@@ -162,7 +162,8 @@ function destroyMap() {
 
 function resetForm() {
   Object.assign(form, {
-    id: '', pipelineId: props.pipelineId || '', type: 'Pressure sensor',
+    id: sensorStore.generateSensorId('Pressure sensor'),
+    pipelineId: props.pipelineId || '', type: 'Pressure sensor',
     manufacturer: '', model: '', serialNumber: '', communication: 'LoRaWAN',
     reportingFrequency: 5, installationDate: new Date().toISOString().slice(0, 10),
     calibrationDate: new Date().toISOString().slice(0, 10), warningBelow: 38,
@@ -234,8 +235,7 @@ function sensorPayload(commissioningStatus) {
 function saveSensor(commissioningStatus) {
   formError.value = ''
   if (sensorStore.sensorIdExists(form.id, props.sensor?.id ?? '')) {
-    formError.value = 'That Sensor ID is already registered.'
-    return
+    form.id = sensorStore.generateSensorId(form.type)
   }
   if (!selectedPipeline.value || !selectedPosition.value) {
     formError.value = 'Select a pipeline and place the sensor on its route.'
@@ -278,6 +278,12 @@ watch(() => form.pipelineId, () => {
   drawSelectedPipeline()
 })
 
+watch(() => form.type, (sensorType) => {
+  if (props.isOpen && !isEditing.value) {
+    form.id = sensorStore.generateSensorId(sensorType)
+  }
+})
+
 onBeforeUnmount(destroyMap)
 </script>
 
@@ -291,7 +297,7 @@ onBeforeUnmount(destroyMap)
           <section class="form-section">
             <h4>Device identity</h4>
             <div class="field-grid">
-              <label><span>Sensor ID *</span><input v-model.trim="form.id" required pattern="[A-Za-z]{2}-[0-9]{3,}" placeholder="SN-072" /></label>
+              <label><span>Sensor ID</span><input v-model="form.id" class="generated-id" readonly aria-describedby="sensor-id-help" /><small id="sensor-id-help">Generated from sensor type and year</small></label>
               <label><span>Sensor type *</span><select v-model="form.type" required><option>Pressure sensor</option><option>Flow meter</option><option>Acoustic leak sensor</option><option>Water-quality sensor</option><option>Valve controller</option><option>Gateway</option></select></label>
               <label><span>Serial number *</span><input v-model.trim="form.serialNumber" required placeholder="Manufacturer serial number" /></label>
               <label><span>Manufacturer *</span><input v-model.trim="form.manufacturer" required /></label>
@@ -322,4 +328,5 @@ onBeforeUnmount(destroyMap)
 
 <style scoped>
 .sensor-backdrop{position:fixed;inset:0;z-index:1350;display:grid;place-items:center;padding:18px;background:rgba(1,9,14,.82);backdrop-filter:blur(8px)}.sensor-modal{width:min(1100px,100%);max-height:calc(100vh - 36px);overflow:auto;border:1px solid #294555;border-radius:16px;background:#081720;box-shadow:0 30px 90px rgba(0,0,0,.62)}.sensor-modal>header{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #1b303e;background:rgba(8,23,32,.97)}header p{margin:0 0 5px;color:#4a829d;font-size:.62rem;font-weight:800;letter-spacing:.15em}header h3{margin:0;color:#f4fbff}header span{display:block;margin-top:5px;color:#718a99;font-size:.68rem}header button{display:grid;width:34px;height:34px;place-items:center;border:1px solid #284354;border-radius:8px;background:#10232f;color:#89a5b5;font-size:1.25rem}.sensor-modal form{display:grid;gap:16px;padding:20px 24px}.form-section,.placement-section{padding:16px;border:1px solid #1b303e;border-radius:11px;background:#0a1b25}.form-section h4,.placement-section h4{margin:0 0 12px;color:#e9f4fb;font-size:.78rem}.placement-section>div:first-child p{margin:-7px 0 12px;color:#718a99;font-size:.65rem}.field-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.field-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.field-grid label{display:grid;gap:6px}.field-grid label span{color:#8fa6b4;font-size:.64rem;font-weight:700}input,select{width:100%;min-height:40px;padding:8px 10px;border:1px solid #294353;border-radius:8px;background:#0c1d27;color:#e9f4fb}.placement-map{height:330px;border:1px solid #294353;border-radius:9px;background:#10232f}.placement-result{display:flex;justify-content:space-between;gap:15px;margin-top:10px;color:#718a99;font-size:.64rem}.placement-result strong{color:#58e6b2}.split-section{display:grid;grid-template-columns:1fr 1fr;gap:22px}.connection-test{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:13px 15px;border:1px solid #294353;border-radius:10px;background:#0a1b25}.connection-test div{display:grid;gap:3px}.connection-test strong{color:#dcebf3;font-size:.7rem}.connection-test span{color:#718a99;font-size:.62rem}.connection-test.success{border-color:rgba(32,219,155,.3);background:rgba(32,219,155,.05)}.connection-test.success strong,.connection-test.success span{color:#4ce4af}.connection-test button{padding:8px 12px;border:1px solid #2b596c;border-radius:7px;background:#102c39;color:#8fe6f8;font-weight:800}.form-error{margin:0;padding:10px;border:1px solid rgba(255,82,103,.28);border-radius:8px;background:rgba(255,82,103,.07);color:#ff8391;font-size:.68rem}footer{display:grid;grid-template-columns:auto 1fr auto auto;gap:9px}footer button{min-height:41px;padding:0 15px;border:1px solid #294353;border-radius:8px;background:#10232f;color:#9ab0bc;font-weight:800}.draft-button{color:#ffc857!important}.commission-button{border:0!important;background:#00addf!important;color:#00131c!important}button{cursor:pointer}button:disabled{opacity:.5}@media(max-width:800px){.field-grid,.split-section{grid-template-columns:1fr 1fr}}@media(max-width:580px){.sensor-backdrop{padding:0}.sensor-modal{max-height:100vh;border-radius:0}.sensor-modal form,.sensor-modal>header{padding:16px}.field-grid,.field-grid.two,.split-section{grid-template-columns:1fr}.placement-result{flex-direction:column}footer{grid-template-columns:1fr 1fr}footer span{display:none}}
+.generated-id{border-color:rgba(0,173,223,.35);background:rgba(0,173,223,.08);color:#91e7f8;font-weight:800}.field-grid small{color:#526d7b;font-size:.56rem}
 </style>

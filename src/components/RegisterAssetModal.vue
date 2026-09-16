@@ -414,7 +414,7 @@ function discardDraft() {
 }
 
 function resetForm() {
-  form.id = ''
+  form.id = assetStore.generateAssetId()
   form.name = ''
   form.material = ''
   form.diameter = ''
@@ -437,8 +437,7 @@ function submitAsset() {
   formError.value = ''
 
   if (assetStore.assetIdExists(form.id)) {
-    formError.value = 'That Asset ID is already registered.'
-    return
+    form.id = assetStore.generateAssetId()
   }
 
   if (routeCoordinates.value.length < 2) {
@@ -472,6 +471,9 @@ watch(
   async (isOpen) => {
     if (isOpen) {
       hasDraft.value = Boolean(window.localStorage.getItem(DRAFT_KEY))
+      if (!hasDraft.value) {
+        resetForm()
+      }
       await nextTick()
       initialiseMap()
       window.setTimeout(() => routeMap?.invalidateSize(), 50)
@@ -504,7 +506,7 @@ onBeforeUnmount(destroyMap)
 
         <form class="registration-body" @submit.prevent="submitAsset">
           <section class="details-grid">
-            <label><span>Asset ID *</span><input v-model.trim="form.id" required pattern="[A-Za-z]{2}-[0-9]{3,}" placeholder="PL-072" /></label>
+            <label><span>Asset ID</span><input v-model="form.id" class="generated-id" readonly aria-describedby="asset-id-help" /><small id="asset-id-help">Generated automatically and never reused</small></label>
             <label class="wide"><span>Asset name *</span><input v-model.trim="form.name" required placeholder="Lambak Main Line" /></label>
             <label><span>Material *</span><select v-model="form.material" required><option value="" disabled>Select material</option><option>Ductile iron</option><option>Steel</option><option>HDPE</option><option>PVC</option></select></label>
             <label><span>Diameter (mm) *</span><input v-model.number="form.diameter" required type="number" min="1" /></label>
@@ -590,7 +592,7 @@ onBeforeUnmount(destroyMap)
 .registration-modal{width:min(1180px,100%);max-height:calc(100vh - 36px);overflow:auto;border:1px solid #294555;border-radius:16px;background:#081720;box-shadow:0 30px 90px rgba(0,0,0,.62)}
 .registration-header{position:sticky;top:0;z-index:5;display:flex;align-items:flex-start;justify-content:space-between;padding:20px 24px;border-bottom:1px solid #1b303e;background:rgba(8,23,32,.96);backdrop-filter:blur(12px)}
 .eyebrow{margin:0 0 5px;color:#4a829d;font-size:.62rem;font-weight:800;letter-spacing:.15em}.registration-header h3{margin:0;color:#f4fbff}.registration-header p:not(.eyebrow){margin:6px 0 0;color:#718a99;font-size:.72rem}.close-button{display:grid;width:34px;height:34px;place-items:center;border:1px solid #284354;border-radius:8px;background:#10232f;color:#89a5b5;font-size:1.25rem}
-.registration-body{display:grid;gap:18px;padding:20px 24px 24px}.details-grid{display:grid;grid-template-columns:1fr 1.7fr 1fr 1fr 1fr;gap:12px}.details-grid label,.length-panel label{display:grid;gap:6px}.details-grid span,.length-panel label span{color:#8fa6b4;font-size:.67rem;font-weight:700}input,select,textarea{width:100%;min-height:40px;padding:9px 11px;border:1px solid #294353;border-radius:8px;outline:none;background:#0c1d27;color:#e9f4fb}input:focus,select:focus,textarea:focus{border-color:#00addf;box-shadow:0 0 0 3px rgba(0,173,223,.1)}
+.registration-body{display:grid;gap:18px;padding:20px 24px 24px}.details-grid{display:grid;grid-template-columns:1fr 1.7fr 1fr 1fr 1fr;gap:12px}.details-grid label,.length-panel label{display:grid;gap:6px}.details-grid span,.length-panel label span{color:#8fa6b4;font-size:.67rem;font-weight:700}input,select,textarea{width:100%;min-height:40px;padding:9px 11px;border:1px solid #294353;border-radius:8px;outline:none;background:#0c1d27;color:#e9f4fb}input:focus,select:focus,textarea:focus{border-color:#00addf;box-shadow:0 0 0 3px rgba(0,173,223,.1)}.generated-id{border-color:rgba(0,173,223,.35);background:rgba(0,173,223,.08);color:#91e7f8;font-weight:800}.details-grid small{color:#526d7b;font-size:.56rem}
 .draft-banner{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid rgba(255,200,87,.3);border-radius:10px;background:rgba(255,200,87,.06)}.draft-banner div{display:grid;flex:1;gap:2px}.draft-banner strong{color:#ffc857;font-size:.72rem}.draft-banner span{color:#78909f;font-size:.65rem}.draft-banner button{padding:7px 11px;border:1px solid #826d35;border-radius:7px;background:#2b2718;color:#ffd979;font-weight:800}.draft-banner .text-button{border:0;background:transparent;color:#8298a6}
 .route-builder{overflow:hidden;border:1px solid #1b303e;border-radius:12px;background:#0a1b25}.route-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px}.route-heading h4{margin:0 0 4px;color:#f4fbff}.route-heading p{margin:0;color:#6f8795;font-size:.68rem}.snap-toggle,.override-toggle{display:flex!important;align-items:center;gap:7px;color:#91a7b4;font-size:.68rem;white-space:nowrap}.snap-toggle input,.override-toggle input{width:auto;min-height:auto}
 .method-tabs{display:flex;gap:4px;padding:0 12px 12px}.method-tabs button{padding:8px 12px;border:1px solid #253d4c;border-radius:7px;background:#0d202b;color:#7f96a4;font-size:.66rem;font-weight:800}.method-tabs button.active{border-color:#00addf;background:rgba(0,173,223,.12);color:#91e7f8}.route-workspace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(260px,.7fr);min-height:390px;border-top:1px solid #1b303e}.map-column{position:relative;min-width:0}.route-map{height:390px;background:#10232f}.place-search{position:absolute;z-index:500;top:10px;left:50px;display:flex;gap:5px;width:min(320px,calc(100% - 65px))}.place-search select{box-shadow:0 5px 18px rgba(0,0,0,.28)}.place-search button,.map-actions button,.method-panel button{padding:8px 11px;border:1px solid #294353;border-radius:7px;background:#10232f;color:#91dff1;font-size:.65rem;font-weight:800}.map-actions{position:absolute;z-index:500;right:10px;bottom:10px;display:flex;align-items:center;gap:6px;padding:6px;border:1px solid #294353;border-radius:9px;background:rgba(8,23,32,.94)}.map-actions span{padding:0 6px;color:#91a7b4;font-size:.62rem}.method-panel{display:flex;flex-direction:column;align-items:stretch;gap:12px;padding:18px;border-left:1px solid #1b303e}.method-panel h5{margin:0;color:#f4fbff;font-size:.8rem}.method-panel p{margin:0;color:#78909f;font-size:.68rem;line-height:1.55}.method-panel textarea{resize:vertical;font-family:monospace;font-size:.7rem}.file-button{display:grid;place-items:center;min-height:44px;border:1px dashed #2e5367;border-radius:9px;background:rgba(0,173,223,.06);color:#91e7f8;font-size:.7rem;font-weight:800;cursor:pointer}.file-button input{display:none}.route-message{margin:0;padding:10px 16px;border-top:1px solid #1b303e;color:#6f8795;font-size:.65rem}

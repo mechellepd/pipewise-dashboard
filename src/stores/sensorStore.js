@@ -4,6 +4,11 @@ import { defineStore } from 'pinia'
 import { sensors as initialSensors } from '../data/sensors'
 import { useAssetStore } from './assetStore'
 import { useNotificationStore } from './notificationStore'
+import {
+  generateNextId,
+  recordGeneratedId,
+  sensorTypePrefixes,
+} from '../utils/idGenerator'
 
 const STORAGE_KEY = 'pipewise-sensors-v1'
 
@@ -147,16 +152,28 @@ export const useSensorStore = defineStore(
       )
     }
 
+    function generateSensorId(sensorType) {
+      const prefix = sensorTypePrefixes[sensorType] ?? 'SN'
+
+      return generateNextId(
+        prefix,
+        sensors.value.map((sensor) => sensor.id),
+      )
+    }
+
     function registerSensor(sensor) {
+      const sensorId =
+        sensor.id?.trim().toUpperCase() || generateSensorId(sensor.type)
       const registeredSensor = normalizeSensor({
         ...sensor,
-        id: sensor.id.trim().toUpperCase(),
-        serialNumber: sensor.serialNumber?.trim() || sensor.id.trim().toUpperCase(),
+        id: sensorId,
+        serialNumber: sensor.serialNumber?.trim() || sensorId,
         status: getStatusFromPressure(Number(sensor.pressure), sensor),
         lastUpdated: 'Just now',
       })
 
       sensors.value.push(registeredSensor)
+      recordGeneratedId(sensorId)
       persistSensors()
       return registeredSensor
     }
@@ -448,6 +465,7 @@ export const useSensorStore = defineStore(
       getSensorById,
       getSensorsByPipeline,
       sensorIdExists,
+      generateSensorId,
 
       updateSensor,
       registerSensor,
