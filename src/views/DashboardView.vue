@@ -105,7 +105,7 @@ const pipelineAssets = [
     <section class="dashboard-content">
       <div class="welcome-row">
         <div>
-          <h3>Pipeline Network Overview (MO)</h3>
+          <h3>Pipeline Network Overview</h3>
 
           <p>
             Monitor infrastructure conditions, telemetry and active
