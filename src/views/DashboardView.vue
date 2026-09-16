@@ -123,7 +123,7 @@ const pipelineAssets = [
           v-for="metric in metrics"
           :key="metric.label"
           class="metric-card"
-        >
+          >
           <div
             class="metric-icon"
             :class="metric.status"
