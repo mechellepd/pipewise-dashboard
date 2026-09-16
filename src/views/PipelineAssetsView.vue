@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 
 import Topbar from '../components/Topbar.vue'
-import { pipelines } from '../data/pipelines'
+import { useAssetStore } from '../stores/assetStore'
 import { useRouter } from 'vue-router'
 
 const searchQuery = ref('')
@@ -11,17 +12,33 @@ const materialFilter = ref('all')
 const sortKey = ref('id')
 const sortDirection = ref('asc')
 const selectedAsset = ref(null)
+const editingAssetId = ref('')
+const editError = ref('')
+const assetPendingDeletion = ref(null)
 const router = useRouter()
+const assetStore = useAssetStore()
+const { pipelines } = storeToRefs(assetStore)
+
+const editForm = reactive({
+  id: '',
+  name: '',
+  material: '',
+  diameter: '',
+  installationYear: '',
+  lengthKm: '',
+  latitude: '',
+  longitude: '',
+})
 
 const materials = computed(() => {
-  return [...new Set(pipelines.map((pipeline) => pipeline.material))]
+  return [...new Set(pipelines.value.map((pipeline) => pipeline.material))]
     .sort()
 })
 
 const filteredAssets = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
 
-  const result = pipelines.filter((pipeline) => {
+  const result = pipelines.value.filter((pipeline) => {
     const matchesSearch =
       !query ||
       pipeline.id.toLowerCase().includes(query) ||
@@ -57,14 +74,14 @@ const filteredAssets = computed(() => {
 
 const summary = computed(() => {
   return {
-    total: pipelines.length,
-    normal: pipelines.filter(
+    total: pipelines.value.length,
+    normal: pipelines.value.filter(
       (pipeline) => pipeline.status === 'normal',
     ).length,
-    warning: pipelines.filter(
+    warning: pipelines.value.filter(
       (pipeline) => pipeline.status === 'warning',
     ).length,
-    critical: pipelines.filter(
+    critical: pipelines.value.filter(
       (pipeline) => pipeline.status === 'critical',
     ).length,
   }
@@ -80,6 +97,15 @@ function viewAssetOnMap() {
     query: {
       pipeline: selectedAsset.value.id,
     },
+  })
+}
+
+function manageAssetSensors() {
+  if (!selectedAsset.value) return
+
+  router.push({
+    name: 'sensor-network',
+    query: { pipeline: selectedAsset.value.id },
   })
 }
 
@@ -108,6 +134,79 @@ function openAsset(asset) {
 
 function closeAsset() {
   selectedAsset.value = null
+}
+
+function openEditAsset(asset) {
+  editingAssetId.value = asset.id
+  editError.value = ''
+  editForm.id = asset.id
+  editForm.name = asset.name
+  editForm.material = asset.material
+  editForm.diameter = asset.diameter
+  editForm.installationYear = asset.installationYear
+  editForm.lengthKm = asset.lengthKm
+  editForm.latitude = asset.coordinates[0]?.[0] ?? 4.9031
+  editForm.longitude = asset.coordinates[0]?.[1] ?? 114.9398
+}
+
+function closeEditAsset() {
+  editingAssetId.value = ''
+  editError.value = ''
+}
+
+function saveAssetChanges() {
+  if (assetStore.assetIdExists(editForm.id, editingAssetId.value)) {
+    editError.value = 'That Asset ID is already registered.'
+    return
+  }
+
+  const latitude = Number(editForm.latitude)
+  const longitude = Number(editForm.longitude)
+  const lengthKm = Number(editForm.lengthKm)
+  const longitudeOffset = Math.max(lengthKm / 111, 0.004)
+
+  const updatedAsset = assetStore.updateAsset(editingAssetId.value, {
+    id: editForm.id,
+    name: editForm.name,
+    material: editForm.material,
+    diameter: Number(editForm.diameter),
+    installationYear: Number(editForm.installationYear),
+    lengthKm,
+    coordinates: [
+      [latitude, longitude],
+      [latitude, longitude + longitudeOffset],
+    ],
+  })
+
+  if (selectedAsset.value?.id === editingAssetId.value) {
+    selectedAsset.value = updatedAsset
+  }
+
+  closeEditAsset()
+}
+
+function requestDeleteAsset(asset) {
+  assetPendingDeletion.value = asset
+}
+
+function cancelDeleteAsset() {
+  assetPendingDeletion.value = null
+}
+
+function confirmDeleteAsset() {
+  const asset = assetPendingDeletion.value
+
+  if (!asset) {
+    return
+  }
+
+  assetStore.deleteAsset(asset.id)
+
+  if (selectedAsset.value?.id === asset.id) {
+    closeAsset()
+  }
+
+  cancelDeleteAsset()
 }
 
 function clearFilters() {
@@ -305,13 +404,17 @@ function exportView() {
                   </span>
                 </td>
 
-                <td>
-                  <button
-                    class="details-button"
-                    type="button"
-                    @click="openAsset(asset)"
-                  >
-                    View details
+                <td class="action-cell">
+                  <button class="details-button" type="button" @click="openAsset(asset)">
+                    View
+                  </button>
+
+                  <button class="edit-button" type="button" @click="openEditAsset(asset)">
+                    Edit
+                  </button>
+
+                  <button class="delete-button" type="button" @click="requestDeleteAsset(asset)">
+                    Delete
                   </button>
                 </td>
               </tr>
@@ -428,12 +531,138 @@ function exportView() {
   View on map
 </button>
 
-              <button type="button">
-                Maintenance history
+              <button type="button" @click="manageAssetSensors">
+                Manage sensors
               </button>
             </div>
           </div>
         </aside>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="editingAssetId"
+        class="modal-backdrop"
+        @click.self="closeEditAsset"
+      >
+        <section
+          class="edit-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-asset-title"
+        >
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow">ASSET REGISTRY</p>
+              <h3 id="edit-asset-title">Edit Pipeline Asset</h3>
+            </div>
+
+            <button
+              class="drawer-close"
+              type="button"
+              aria-label="Close edit asset form"
+              @click="closeEditAsset"
+            >×</button>
+          </div>
+
+          <form class="edit-form" @submit.prevent="saveAssetChanges">
+            <div class="form-row">
+              <label>
+                <span>Asset ID *</span>
+                <input
+                  v-model.trim="editForm.id"
+                  required
+                  pattern="[A-Za-z]{2}-[0-9]{3,}"
+                />
+              </label>
+
+              <label>
+                <span>Asset name *</span>
+                <input v-model.trim="editForm.name" required />
+              </label>
+            </div>
+
+            <div class="form-row three-columns">
+              <label>
+                <span>Material *</span>
+                <select v-model="editForm.material" required>
+                  <option>Ductile iron</option>
+                  <option>Steel</option>
+                  <option>HDPE</option>
+                  <option>PVC</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Diameter (mm) *</span>
+                <input v-model.number="editForm.diameter" required type="number" min="1" />
+              </label>
+
+              <label>
+                <span>Length (km) *</span>
+                <input v-model.number="editForm.lengthKm" required type="number" min="0.1" step="0.1" />
+              </label>
+            </div>
+
+            <div class="form-row three-columns">
+              <label>
+                <span>Installation year *</span>
+                <input
+                  v-model.number="editForm.installationYear"
+                  required
+                  type="number"
+                  min="1900"
+                  :max="new Date().getFullYear()"
+                />
+              </label>
+
+              <label>
+                <span>Start latitude *</span>
+                <input v-model.number="editForm.latitude" required type="number" min="-90" max="90" step="0.0001" />
+              </label>
+
+              <label>
+                <span>Start longitude *</span>
+                <input v-model.number="editForm.longitude" required type="number" min="-180" max="180" step="0.0001" />
+              </label>
+            </div>
+
+            <p v-if="editError" class="form-error">{{ editError }}</p>
+
+            <div class="modal-actions">
+              <button class="cancel-button" type="button" @click="closeEditAsset">Cancel</button>
+              <button class="save-button" type="submit">Save changes</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="assetPendingDeletion"
+        class="modal-backdrop"
+        @click.self="cancelDeleteAsset"
+      >
+        <section
+          class="confirm-modal"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-asset-title"
+        >
+          <p class="eyebrow">CONFIRM DELETION</p>
+          <h3 id="delete-asset-title">Delete {{ assetPendingDeletion.id }}?</h3>
+          <p>
+            {{ assetPendingDeletion.name }} will be removed from the registry
+            and network map. This action cannot be undone.
+          </p>
+
+          <div class="modal-actions">
+            <button class="cancel-button" type="button" @click="cancelDeleteAsset">Keep asset</button>
+            <button class="confirm-delete-button" type="button" @click="confirmDeleteAsset">Delete asset</button>
+          </div>
+        </section>
       </div>
     </Teleport>
   </main>
@@ -687,12 +916,35 @@ td strong {
   padding: 7px 10px;
 }
 
-.details-button {
+.action-cell {
+  display: flex;
+  gap: 6px;
+}
+
+.details-button,
+.edit-button,
+.delete-button {
   padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.details-button,
+.edit-button {
   border: 1px solid #214052;
   background: #10232f;
   color: #87dff2;
-  font-size: 0.62rem;
+}
+
+.edit-button {
+  color: #ffc857;
+}
+
+.delete-button {
+  border: 1px solid rgba(255, 82, 103, 0.32);
+  background: rgba(255, 82, 103, 0.08);
+  color: #ff7182;
 }
 
 .empty-state {
@@ -804,6 +1056,143 @@ td strong {
   font-size: 0.68rem;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(1, 9, 14, 0.74);
+  backdrop-filter: blur(7px);
+}
+
+.edit-modal,
+.confirm-modal {
+  width: min(100%, 760px);
+  overflow: hidden;
+  border: 1px solid #294555;
+  border-radius: 16px;
+  background: #0a1821;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.confirm-modal {
+  width: min(100%, 460px);
+  padding: 24px;
+}
+
+.confirm-modal h3 {
+  margin: 0;
+  color: #f4fbff;
+}
+
+.confirm-modal > p:not(.eyebrow) {
+  margin: 12px 0 22px;
+  color: #78909f;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #1b303e;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #f4fbff;
+  font-size: 1.15rem;
+}
+
+.edit-form {
+  display: grid;
+  gap: 17px;
+  padding: 24px;
+}
+
+.edit-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.edit-form label span {
+  color: #8fa6b4;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.edit-form input,
+.edit-form select {
+  width: 100%;
+  min-height: 43px;
+  padding: 10px 12px;
+  border: 1px solid #294353;
+  border-radius: 9px;
+  outline: none;
+  background: #0c1d27;
+  color: #e9f4fb;
+}
+
+.edit-form input:focus,
+.edit-form select:focus {
+  border-color: #00addf;
+  box-shadow: 0 0 0 3px rgba(0, 173, 223, 0.1);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.form-row.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-error {
+  margin: 0;
+  color: #ff7182;
+  font-size: 0.7rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cancel-button,
+.save-button,
+.confirm-delete-button {
+  min-height: 41px;
+  padding: 0 16px;
+  border-radius: 9px;
+  font-weight: 800;
+}
+
+.cancel-button {
+  border: 1px solid #294353;
+  background: #10232f;
+  color: #9ab0bc;
+}
+
+.save-button {
+  border: 0;
+  background: #00addf;
+  color: #00131c;
+}
+
+.confirm-delete-button {
+  border: 1px solid rgba(255, 82, 103, 0.38);
+  background: #ff5267;
+  color: #ffffff;
+}
+
 @media (max-width: 1100px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -838,6 +1227,20 @@ td strong {
 
   .export-button {
     width: 100%;
+  }
+
+  .modal-backdrop {
+    padding: 12px;
+  }
+
+  .form-row,
+  .form-row.three-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-form,
+  .modal-header {
+    padding: 18px;
   }
 }
 </style>

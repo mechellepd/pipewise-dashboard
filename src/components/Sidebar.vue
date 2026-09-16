@@ -1,7 +1,14 @@
 <script setup>
-import pipewiseLogo from '../assets/pipewise-logo.png'
+import { computed } from 'vue'
 
-const menuItems = [
+import pipewiseLogo from '../assets/pipewise-logo.png'
+import { useNotificationStore } from '../stores/notificationStore'
+import { useSensorStore } from '../stores/sensorStore'
+
+const notificationStore = useNotificationStore()
+const sensorStore = useSensorStore()
+
+const menuItems = computed(() => [
   {
     name: 'Dashboard',
     routeName: 'dashboard',
@@ -21,12 +28,15 @@ const menuItems = [
     name: 'Sensor Network',
     routeName: 'sensor-network',
     icon: '◉',
+    notificationCount: sensorStore.sensors.filter(
+      (sensor) => sensor.connectionStatus === 'offline',
+    ).length,
   },
   {
     name: 'Alerts',
     routeName: 'alerts',
     icon: '!',
-    notificationCount: 3,
+    notificationCount: notificationStore.activeCount,
   },
   {
     name: 'Maintenance',
@@ -38,7 +48,7 @@ const menuItems = [
     routeName: 'analytics',
     icon: '↗',
   },
-]
+])
 </script>
 <template>
   <aside class="sidebar">

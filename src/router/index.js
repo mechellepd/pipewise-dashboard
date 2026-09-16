@@ -4,9 +4,11 @@ import {
 } from 'vue-router'
 
 import DashboardView from '../views/DashboardView.vue'
+import AlertsView from '../views/AlertsView.vue'
 import OperationalPlaceholderView from '../views/OperationalPlaceholderView.vue'
 import PipelineAssetsView from '../views/PipelineAssetsView.vue'
 import NetworkMapView from '../views/NetworkMapView.vue'
+import SensorNetworkView from '../views/SensorNetworkView.vue'
 
 const routes = [
   {
@@ -36,7 +38,7 @@ const routes = [
   {
     path: '/sensor-network',
     name: 'sensor-network',
-    component: OperationalPlaceholderView,
+    component: SensorNetworkView,
     meta: {
       title: 'Sensor Network',
       description:
@@ -46,7 +48,7 @@ const routes = [
   {
     path: '/alerts',
     name: 'alerts',
-    component: OperationalPlaceholderView,
+    component: AlertsView,
     meta: {
       title: 'Alerts',
       description:

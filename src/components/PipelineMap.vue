@@ -10,7 +10,8 @@ import {
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-import { pipelines } from '../data/pipelines'
+import { useAssetStore } from '../stores/assetStore'
+import { useNotificationStore } from '../stores/notificationStore'
 import { useSensorStore } from '../stores/sensorStore'
 
 const props = defineProps({
@@ -27,6 +28,8 @@ const props = defineProps({
 
 const mapContainer = ref(null)
 const sensorStore = useSensorStore()
+const assetStore = useAssetStore()
+const notificationStore = useNotificationStore()
 const cartoApiKey =
   import.meta.env.VITE_CARTO_API_KEY?.trim()
 
@@ -42,6 +45,7 @@ const statusColours = {
   normal: '#20db9b',
   warning: '#ffc857',
   critical: '#ff5267',
+  offline: '#607887',
 }
 
 function getStatusColour(status) {
@@ -52,8 +56,19 @@ function getStatusColour(status) {
 }
 
 function getPipelineStatus(pipelineId) {
+  const incidentStatus =
+    notificationStore.getPipelineIncidentStatus(pipelineId)
+
+  if (incidentStatus) {
+    return incidentStatus
+  }
+
   const relatedSensors =
-    sensorStore.getSensorsByPipeline(pipelineId)
+    sensorStore.getSensorsByPipeline(pipelineId).filter(
+      (sensor) =>
+        sensor.commissioningStatus === 'commissioned' &&
+        sensor.connectionStatus !== 'offline',
+    )
 
   if (
     relatedSensors.some(
@@ -71,7 +86,7 @@ function getPipelineStatus(pipelineId) {
     return 'warning'
   }
 
-  const pipeline = pipelines.find(
+  const pipeline = assetStore.pipelines.find(
     (item) => item.id === pipelineId,
   )
 
@@ -279,7 +294,9 @@ function highlightPipeline(
   resetPipelineStyles()
 
   target.polyline.setStyle({
-    color: '#61e4ff',
+    color: getStatusColour(
+      getPipelineStatus(pipelineId),
+    ),
     weight: 9,
     opacity: 1,
   })
@@ -366,7 +383,7 @@ function createBasemaps() {
 }
 
 function drawPipelines() {
-  pipelines.forEach((pipeline) => {
+  assetStore.pipelines.forEach((pipeline) => {
     const status =
       getPipelineStatus(pipeline.id)
 
@@ -399,12 +416,19 @@ function drawPipelines() {
 }
 
 function drawSensors() {
-  sensorStore.sensors.forEach((sensor) => {
+  sensorStore.sensors
+    .filter((sensor) => sensor.commissioningStatus !== 'draft')
+    .forEach((sensor) => {
+    const displayStatus =
+      sensor.connectionStatus === 'offline'
+        ? 'offline'
+        : sensor.status
+
     const marker = L.marker(
       sensor.position,
       {
         icon: createSensorIcon(
-          sensor.status,
+          displayStatus,
         ),
       },
     )
@@ -413,8 +437,8 @@ function drawSensors() {
       )
       .addTo(sensorLayer)
 
-    sensorMarkers.set(sensor.id, marker)
-  })
+      sensorMarkers.set(sensor.id, marker)
+    })
 }
 
 function initialiseMap() {
@@ -472,7 +496,7 @@ function initialiseMap() {
   drawPipelines()
   drawSensors()
 
-  const allCoordinates = pipelines.flatMap(
+  const allCoordinates = assetStore.pipelines.flatMap(
     (pipeline) => pipeline.coordinates,
   )
 
@@ -510,6 +534,34 @@ watch(
 )
 
 watch(
+  () => assetStore.pipelines,
+  () => {
+    if (!pipelineLayer) {
+      return
+    }
+
+    pipelineLayer.clearLayers()
+    pipelinePolylines.clear()
+    drawPipelines()
+  },
+  { deep: true },
+)
+
+watch(
+  () =>
+    notificationStore.notifications.map((alert) => ({
+      id: alert.id,
+      assetId: alert.assetId,
+      severity: alert.severity,
+      status: alert.status,
+    })),
+  () => {
+    resetPipelineStyles()
+  },
+  { deep: true },
+)
+
+watch(
   () =>
     sensorStore.sensors.map((sensor) => ({
       id: sensor.id,
@@ -518,7 +570,13 @@ watch(
       status: sensor.status,
     })),
   () => {
-    updateMapTelemetry()
+    if (sensorLayer) {
+      sensorLayer.clearLayers()
+      sensorMarkers.clear()
+      drawSensors()
+    }
+
+    resetPipelineStyles()
   },
   {
     deep: true,

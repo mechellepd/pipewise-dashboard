@@ -2,15 +2,51 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { sensors as initialSensors } from '../data/sensors'
+import { useAssetStore } from './assetStore'
+import { useNotificationStore } from './notificationStore'
+
+const STORAGE_KEY = 'pipewise-sensors-v1'
+
+function normalizeSensor(sensor) {
+  return {
+    manufacturer: 'PIPEWISE Technologies',
+    model: 'PW Industrial',
+    serialNumber: sensor.id,
+    communication: 'LoRaWAN',
+    reportingFrequency: 5,
+    installationDate: '2026-01-15',
+    calibrationDate: '2026-01-15',
+    connectionStatus: 'online',
+    commissioningStatus: 'commissioned',
+    distanceKm: 0,
+    ...sensor,
+    thresholds: {
+      warningBelow: 38,
+      criticalBelow: 25,
+      ...(sensor.thresholds ?? {}),
+    },
+    position: [...sensor.position],
+  }
+}
+
+function loadSensors() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY))
+    return Array.isArray(saved)
+      ? saved.map(normalizeSensor)
+      : initialSensors.map(normalizeSensor)
+  } catch {
+    return initialSensors.map(normalizeSensor)
+  }
+}
 
 export const useSensorStore = defineStore(
   'sensorStore',
   () => {
-    const sensors = ref(
-      initialSensors.map((sensor) => ({
-        ...sensor,
-      })),
-    )
+    const notificationStore = useNotificationStore()
+    const assetStore = useAssetStore()
+
+    const sensors = ref(loadSensors())
 
     const isSimulationRunning = ref(false)
 
@@ -45,12 +81,19 @@ export const useSensorStore = defineStore(
       ).length
     })
 
-    function getStatusFromPressure(pressure) {
-      if (pressure < 25) {
+    function persistSensors() {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sensors.value))
+    }
+
+    function getStatusFromPressure(pressure, sensor = null) {
+      const criticalThreshold = sensor?.thresholds?.criticalBelow ?? 25
+      const warningThreshold = sensor?.thresholds?.warningBelow ?? 38
+
+      if (pressure < criticalThreshold) {
         return 'critical'
       }
 
-      if (pressure < 38) {
+      if (pressure < warningThreshold) {
         return 'warning'
       }
 
@@ -70,7 +113,7 @@ export const useSensorStore = defineStore(
       )
     }
 
-    function updateSensor(sensorId, updates) {
+    function updateSensor(sensorId, updates, shouldPersist = false) {
       const sensor = getSensorById(sensorId)
 
       if (!sensor) {
@@ -85,8 +128,87 @@ export const useSensorStore = defineStore(
 
       if ('pressure' in updates) {
         sensor.status =
-          getStatusFromPressure(sensor.pressure)
+          getStatusFromPressure(sensor.pressure, sensor)
       }
+
+      if (shouldPersist) {
+        persistSensors()
+      }
+    }
+
+    function sensorIdExists(sensorId, excludedId = '') {
+      const normalizedId = sensorId.trim().toUpperCase()
+      const normalizedExcludedId = excludedId.trim().toUpperCase()
+
+      return sensors.value.some(
+        (sensor) =>
+          sensor.id.toUpperCase() === normalizedId &&
+          sensor.id.toUpperCase() !== normalizedExcludedId,
+      )
+    }
+
+    function registerSensor(sensor) {
+      const registeredSensor = normalizeSensor({
+        ...sensor,
+        id: sensor.id.trim().toUpperCase(),
+        serialNumber: sensor.serialNumber?.trim() || sensor.id.trim().toUpperCase(),
+        status: getStatusFromPressure(Number(sensor.pressure), sensor),
+        lastUpdated: 'Just now',
+      })
+
+      sensors.value.push(registeredSensor)
+      persistSensors()
+      return registeredSensor
+    }
+
+    function updateSensorDetails(currentId, updates) {
+      const index = sensors.value.findIndex((sensor) => sensor.id === currentId)
+      if (index === -1) return null
+
+      const updatedSensor = normalizeSensor({
+        ...sensors.value[index],
+        ...updates,
+        thresholds: {
+          ...sensors.value[index].thresholds,
+          ...(updates.thresholds ?? {}),
+        },
+        id: updates.id.trim().toUpperCase(),
+      })
+      updatedSensor.status = getStatusFromPressure(updatedSensor.pressure, updatedSensor)
+      sensors.value[index] = updatedSensor
+      persistSensors()
+      return updatedSensor
+    }
+
+    function deleteSensor(sensorId) {
+      const index = sensors.value.findIndex((sensor) => sensor.id === sensorId)
+      if (index === -1) return false
+      sensors.value.splice(index, 1)
+      persistSensors()
+      return true
+    }
+
+    async function testSensorConnection(sensorId) {
+      await new Promise((resolve) => window.setTimeout(resolve, 900))
+      const sensor = getSensorById(sensorId)
+      if (!sensor) return false
+
+      sensor.connectionStatus = 'online'
+      sensor.lastConnectionTest = 'Just now'
+      if (sensor.commissioningStatus === 'offline') {
+        sensor.commissioningStatus = 'commissioned'
+      }
+      persistSensors()
+      return true
+    }
+
+    function setCommissioningStatus(sensorId, status) {
+      const sensor = getSensorById(sensorId)
+      if (!sensor) return null
+      sensor.commissioningStatus = status
+      sensor.connectionStatus = status === 'offline' ? 'offline' : sensor.connectionStatus
+      persistSensors()
+      return sensor
     }
 
     function generateReading(sensor) {
@@ -113,7 +235,7 @@ export const useSensorStore = defineStore(
       sensor.lastUpdated = 'Just now'
 
       sensor.status =
-        getStatusFromPressure(sensor.pressure)
+        getStatusFromPressure(sensor.pressure, sensor)
     }
 
     function startSimulation() {
@@ -173,6 +295,11 @@ export const useSensorStore = defineStore(
 
       stopSimulation()
       stopDemoTimer()
+
+      notificationStore.resolveSensorAlert(
+        'SN-023',
+        'Previous condition cleared before starting a new leak demonstration.',
+      )
 
       isDemoRunning.value = true
       demoStage.value = 'normal'
@@ -254,6 +381,23 @@ export const useSensorStore = defineStore(
             lastUpdated: 'Just now',
           })
 
+          if (['warning', 'critical'].includes(reading.stage)) {
+            notificationStore.upsertSensorAlert({
+              title:
+                reading.stage === 'critical'
+                  ? 'Critical pressure drop'
+                  : 'Pipeline pressure warning',
+              message:
+                `Sensor SN-023 is reporting ${reading.pressure} PSI ` +
+                `and a flow rate of ${reading.flowRate} L/min.`,
+              assetId: 'PL-023',
+              sensorId: 'SN-023',
+              severity: reading.stage,
+              category: 'Leak detection',
+              assignedTo: 'Operations Control',
+            })
+          }
+
           step += 1
         },
         3500,
@@ -271,18 +415,21 @@ export const useSensorStore = defineStore(
         pressure: 46.2,
         flowRate: 1194,
         lastUpdated: 'Just now',
-      })
+      }, true)
+
+      notificationStore.resolveSensorAlert(
+        'SN-023',
+        'Demo reset completed and sensor pressure returned to normal.',
+      )
+
+      assetStore.setAssetStatus('PL-023', 'normal')
 
       startSimulation()
     }
 
     function resetSensors() {
-      sensors.value =
-        initialSensors.map(
-          (sensor) => ({
-            ...sensor,
-          }),
-        )
+      sensors.value = initialSensors.map(normalizeSensor)
+      persistSensors()
     }
 
     return {
@@ -300,8 +447,14 @@ export const useSensorStore = defineStore(
 
       getSensorById,
       getSensorsByPipeline,
+      sensorIdExists,
 
       updateSensor,
+      registerSensor,
+      updateSensorDetails,
+      deleteSensor,
+      testSensorConnection,
+      setCommissioningStatus,
 
       startSimulation,
       stopSimulation,
