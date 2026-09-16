@@ -27,6 +27,8 @@ const props = defineProps({
 
 const mapContainer = ref(null)
 const sensorStore = useSensorStore()
+const cartoApiKey =
+  import.meta.env.VITE_CARTO_API_KEY?.trim()
 
 let map = null
 let pipelineLayer = null
@@ -303,10 +305,16 @@ function highlightPipeline(
 }
 
 function createBasemaps() {
+  const cartoKeyQuery = cartoApiKey
+    ? `?key=${encodeURIComponent(cartoApiKey)}`
+    : ''
+
   const darkMap = L.tileLayer(
     'https://{s}.basemaps.cartocdn.com/' +
-      'dark_all/{z}/{x}/{y}{r}.png',
+      'dark_all/{z}/{x}/{y}{r}.png' +
+      cartoKeyQuery,
     {
+      subdomains: 'abcd',
       maxZoom: 20,
       attribution:
         '&copy; OpenStreetMap contributors ' +
@@ -326,8 +334,10 @@ function createBasemaps() {
 
   const lightMap = L.tileLayer(
     'https://{s}.basemaps.cartocdn.com/' +
-      'light_all/{z}/{x}/{y}{r}.png',
+      'light_all/{z}/{x}/{y}{r}.png' +
+      cartoKeyQuery,
     {
+      subdomains: 'abcd',
       maxZoom: 20,
       attribution:
         '&copy; OpenStreetMap contributors ' +
